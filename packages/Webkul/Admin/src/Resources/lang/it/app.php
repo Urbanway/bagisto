@@ -196,6 +196,7 @@ return [
         'billed-to' => 'Fatturato a',
         'shipped-to' => 'Spedito a',
         'order-id' => 'Id Ordine',
+        'invoice-id' => 'numero di fattura',
         'invoice-date' => 'Data Fattura',
         'total-qty' => 'Qtà Totale',
         'inventory-source' => 'Magazzino',
@@ -421,7 +422,10 @@ return [
             'print' => 'Stampa',
             'order-date' => 'Data Ordine',
             'creation-error' => 'La creazione della fattura dell\'Ordine non è consentita.',
-            'product-error' => 'La fattura non può essere creata senza prodotti.'
+            'product-error' => 'La fattura non può essere creata senza prodotti.',
+            'status-overdue' => 'Pending',
+            'status-pending' => 'Pending Payment',
+            'status-paid'    => 'Paid',
         ],
 
         'shipments' => [
@@ -476,16 +480,24 @@ return [
 
         'transactions' => [
             'title'               => 'Transactions',
+            'create-title'        => 'Add transaction',
             'id'                  => 'Id',
             'transaction-id'      => 'Transaction Id',
             'payment-method'      => 'Payment method',
+            'transaction-amount' => 'Transaction amount',
             'action'              => 'Action',
             'view-title'          => 'Transaction #:transaction_id',
             'transaction-data'    => 'Transaction Data',
             'order-id'            => 'Order Id',
+            'invoice-id' => 'Invoice Id',
             'status'              => 'Status',
             'created-at'          => 'Created At',
-            'transaction-details' => 'Transaction Details'
+            'transaction-details' => 'Transaction Details',
+            'response' => [
+                'invoice-missing'    => 'This invoice id does not exist',
+                'transaction-saved'  => 'The transaction has been saved',
+                'already-paid'       => 'This invoice has already been paid'
+            ]
         ]
     ],
 
@@ -1410,9 +1422,13 @@ return [
             'weight-unit' => 'Unità di peso',
             'email-settings'    => 'Impostazioni Email',
             'email-sender-name' => 'Nome Mittente Email',
+            'email-sender-name-tip' => 'This name will be displayed in the customers inbox',
             'shop-email-from'   => 'Indirizzo Email Negozio [per invio email]',
-            'admin-name'    => 'Nome Admin',
+            'shop-email-from-tip' => 'The email address of this channel to send emails to your customers',
+            'admin-name' => 'Nome Admin',
+            'admin-name-tip' => 'This name will be displayed in all admin emails',
             'admin-email' => 'Email Admin',
+            'admin-email-tip' => 'The email address of the admin for this channel to receive emails',
             'admin-page-limit' => 'Numero di risultati per Pagina (Admin)',
             'design' => 'Design',
             'admin-logo' => 'Logo Admin',
@@ -1426,15 +1442,25 @@ return [
             'order-number-length' => 'Lunghezza Numero Ordine',
             'order-number-suffix' => 'Suffisso Numero Ordine',
             'order-number-generator-class' => 'Generatore di numeri dordine',
-            'minimum-order' => 'Minimum Order Settings',
-            'minimum-order-amount' => 'Minimum Order Amount',
+            'minimum-order' => 'Impostazioni dell\'ordine minimo',
+            'minimum-order-amount' => 'Importo minimo dell\'ordine',
+            'invoice-settings' => 'Impostazioni fattura',
+            'invoice-number' => 'Impostazioni numero fattura',
+            'invoice-number-prefix' => 'Prefisso numero fattura',
+            'invoice-number-length' => 'Lunghezza numero fattura',
+            'invoice-number-suffix' => 'Suffisso numero fattura',
+            'invoice-number-generator-class' => 'Generatore di numeri di fattura',
+            'payment-terms' => 'Termini di pagamento',
+            'due-duration' => 'Durata dovuta',
+            'due-duration-day' => ':due-duration Giorno',
+            'due-duration-days' => ':due-duration giorni',
+            'invoice-slip-design' => 'Design della Fattura',
+            'logo' => 'Logo',
             'default' => 'Default',
             'sandbox' => 'Sandbox',
             'all-channels' => 'Tutti',
             'all-locales' => 'Tutti',
             'all-customer-groups' => 'tutti i Gruppi di Clienti',
-            'invoice-slip-design' => 'Design della Fattura',
-            'logo' => 'Logo',
             'storefront' => 'Storefront',
             'default-list-mode' => 'Modalità predefinita elenchiDefault List Mode',
             'grid' => 'Griglia',
@@ -1485,6 +1511,10 @@ return [
             'cache-small-image' => 'Small Image',
             'cache-medium-image' => 'Medium Image',
             'cache-large-image' => 'Large Image',
+            'generate-invoice'   => 'Automatically generate the invoice after placing an order',
+            'set-invoice-status' => 'Set the invoice status after creating the invoice to',
+            'set-order-status'   => 'Set the order status after creating the invoice to',
+            'generate-invoice-applicable' => 'Applicable if automatic generate invoice is enabled'
         ]
     ]
 ];

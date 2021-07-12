@@ -55,7 +55,7 @@ class Install extends Command
 
         // running `php artisan vendor:publish --all`
         $this->warn('Step: Publishing assets and configurations...');
-        $result = $this->call('vendor:publish', ['--all']);
+        $result = $this->call('vendor:publish', ['--all' => true, '--force' => true]);
         $this->info($result);
 
         // running `php artisan storage:link`
@@ -72,6 +72,11 @@ class Install extends Command
         $this->warn('Step: Composer autoload...');
         $result = shell_exec('composer dump-autoload');
         $this->info($result);
+
+        // removing the installer directory
+        if (is_dir('public/installer')) {
+            shell_exec('rm -rf public/installer');
+        }
 
         // final information
         $this->info('-----------------------------');

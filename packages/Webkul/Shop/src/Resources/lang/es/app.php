@@ -263,11 +263,14 @@ return [
                     'submit' => 'Guardar dirección',
                     'success' => 'Dirección actualizada exitosamente.',
                 ],
+
                 'delete' => [
                     'success' => 'Dirección eliminada correctamente',
                     'failure' => 'La dirección no puede ser eliminada',
                     'wrong-password' => 'Contraseña Incorrecta !'
-                ]
+                ],
+
+                'default-address' => 'Default Address',
             ],
 
             'order' => [
@@ -327,6 +330,8 @@ return [
                     'invoice-id' => 'Factura Id',
                     'order-id' => 'Pedido Id',
                     'order-date' => 'Fecha pedido',
+                    'invoice-date' => 'Fecha de la factura',
+                    'payment-terms' => 'Términos de pago',
                     'bill-to' => 'Facturar a',
                     'ship-to' => 'Envío a',
                     'contact' => 'Contacto',
@@ -386,7 +391,16 @@ return [
 
                 'view' => [
                     'page-tile' => 'Opinión #:id',
-                ]
+                ],
+
+                'delete' => [
+                    'confirmation-message' => '¿Seguro que quieres eliminar esta crítica?',
+                ],
+
+                'delete-all' => [
+                    'title' => 'Eliminar todos',
+                    'confirmation-message' => '¿Estás segura de que quieres eliminar todas las críticas?',
+                ],
             ]
         ]
     ],
@@ -445,6 +459,7 @@ return [
         'compare_options' => 'Comparar Optiones',
         'wishlist-options' => 'Opciones de Lista de Deseos',
         'offers' => 'Compre :qty por :price cada uno y ahorre :discount%',
+        'tax-inclusive' => 'Inclusive of all taxes',
     ],
 
     // 'reviews' => [
@@ -499,7 +514,7 @@ return [
             'event' => [
                 'expired' => 'This event has been expired.'
             ],
-            'minimum-order-message' => 'Minimum order amount is :amount'
+            'minimum-order-message' => 'La cantidad mínima de pedido es :amount'
         ],
 
         'onepage' => [

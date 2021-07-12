@@ -261,11 +261,14 @@ return [
                     'submit' => 'Zapisz adres',
                     'success' => 'Adres został zaktualizowany pomyślnie.',
                 ],
+
                 'delete' => [
                     'success' => 'Adres został usunięty pomyślnie.',
                     'failure' => 'Nie można usunąć adresu',
                     'wrong-password' => 'Błędne hasło!'
-                ]
+                ],
+
+                'default-address' => 'Default Address',
             ],
 
             'order' => [
@@ -325,6 +328,8 @@ return [
                     'invoice-id' => 'Identyfikator faktury',
                     'order-id' => 'Identyfikator zamówienia',
                     'order-date' => 'Data zamówienia',
+                    'invoice-date' => 'Data wystawienia faktury',
+                    'payment-terms' => 'Zasady płatności',
                     'bill-to' => 'Bill to',
                     'ship-to' => 'Dostawa do',
                     'contact' => 'Kontakt',
@@ -384,7 +389,16 @@ return [
 
                 'view' => [
                     'page-tile' => 'Recenzja #:id',
-                ]
+                ],
+
+                'delete' => [
+                    'confirmation-message' => 'Czy na pewno chcesz usunąć tę recenzję?',
+                ],
+
+                'delete-all' => [
+                    'title' => 'Usuń wszystko',
+                    'confirmation-message' => 'Czy na pewno chcesz usunąć wszystkie opinie?',
+                ],
             ]
         ]
     ],
@@ -442,6 +456,7 @@ return [
         'compare_options' => 'Compare Options',
         'wishlist-options' => 'Wishlist Options',
         'offers' => 'Buy :qty for :price each and save :discount%',
+        'tax-inclusive' => 'Inclusive of all taxes',
     ],
 
     // 'reviews' => [
@@ -496,7 +511,7 @@ return [
             'event' => [
                 'expired' => 'To wydarzenie wygasło.'
             ],
-            'minimum-order-message' => 'Minimum order amount is :amount'
+            'minimum-order-message' => 'Minimalna kwota zamówienia to :amount'
         ],
 
         'onepage' => [

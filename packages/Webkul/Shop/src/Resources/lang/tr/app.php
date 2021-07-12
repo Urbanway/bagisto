@@ -260,11 +260,14 @@ return [
                     'submit' => 'Adres Kaydet',
                     'success' => 'Adres Başarıyla Güncellendi.',
                 ],
+
                 'delete' => [
                     'success' => 'Adres başarıyla silindi.',
                     'failure' => 'Adres silinirken hata oluştu!',
                     'wrong-password' => 'Parolanızı hatalı girdiniz!'
-                ]
+                ],
+
+                'default-address' => 'Default Address',
             ],
 
             'order' => [
@@ -324,6 +327,8 @@ return [
                     'invoice-id' => 'Fatura No',
                     'order-id' => 'Sipariş No',
                     'order-date' => 'Sipariş Tarihi',
+                    'invoice-date' => 'Fatura tarihi',
+                    'payment-terms' => 'Ödeme şartları',
                     'bill-to' => 'Fatura Edilen',
                     'ship-to' => 'Teslim Edilen',
                     'contact' => 'İletişim',
@@ -383,7 +388,16 @@ return [
 
                 'view' => [
                     'page-tile' => 'İnceleme #:id',
-                ]
+                ],
+
+                'delete' => [
+                    'confirmation-message' => 'Bu incelemeyi silmek istediğinizden emin misiniz?',
+                ],
+
+                'delete-all' => [
+                    'title' => 'Hepsini sil',
+                    'confirmation-message' => 'Tüm yorumları silmek istediğinizden emin misiniz?',
+                ],
             ]
         ]
     ],
@@ -442,6 +456,7 @@ return [
         'compare_options' => 'Compare Options',
         'wishlist-options' => 'Wishlist Options',
         'offers' => 'Buy :qty for :price each and save :discount%',
+        'tax-inclusive' => 'Inclusive of all taxes',
     ],
 
     // 'reviews' => [

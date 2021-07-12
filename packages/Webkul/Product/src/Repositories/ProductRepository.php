@@ -149,9 +149,9 @@ class ProductRepository extends Repository
         $page = Paginator::resolveCurrentPage('page');
 
         $repository = app(ProductFlatRepository::class)->scopeQuery(function ($query) use ($params, $categoryId) {
-            $channel = request()->get('channel') ?: (core()->getCurrentChannelCode() ?: core()->getDefaultChannelCode());
+            $channel = core()->getRequestedChannelCode();
 
-            $locale = request()->get('locale') ?: app()->getLocale();
+            $locale = core()->getRequestedLocaleCode();
 
             $qb = $query->distinct()
                 ->select('product_flat.*')
@@ -375,9 +375,9 @@ class ProductRepository extends Repository
         $count = core()->getConfigData('catalog.products.homepage.no_of_new_product_homepage');
 
         $results = app(ProductFlatRepository::class)->scopeQuery(function ($query) {
-            $channel = request()->get('channel') ?: (core()->getCurrentChannelCode() ?: core()->getDefaultChannelCode());
+            $channel = core()->getRequestedChannelCode();
 
-            $locale = request()->get('locale') ?: app()->getLocale();
+            $locale = core()->getRequestedLocaleCode();
 
             return $query->distinct()
                 ->addSelect('product_flat.*')
@@ -402,9 +402,9 @@ class ProductRepository extends Repository
         $count = core()->getConfigData('catalog.products.homepage.no_of_featured_product_homepage');
 
         $results = app(ProductFlatRepository::class)->scopeQuery(function ($query) {
-            $channel = request()->get('channel') ?: (core()->getCurrentChannelCode() ?: core()->getDefaultChannelCode());
+            $channel = core()->getRequestedChannelCode();
 
-            $locale = request()->get('locale') ?: app()->getLocale();
+            $locale = core()->getRequestedLocaleCode();
 
             return $query->distinct()
                 ->addSelect('product_flat.*')
@@ -428,9 +428,9 @@ class ProductRepository extends Repository
      */
     public function searchProductByAttribute($term)
     {
-        $channel = request()->get('channel') ?: (core()->getCurrentChannelCode() ?: core()->getDefaultChannelCode());
+        $channel = core()->getRequestedChannelCode();
 
-        $locale = request()->get('locale') ?: app()->getLocale();
+        $locale = core()->getRequestedLocaleCode();
 
         if (config('scout.driver') == 'algolia') {
             $results = app(ProductFlatRepository::class)->getModel()::search('query', function ($searchDriver, string $query, array $options) use ($term, $channel, $locale) {
@@ -466,17 +466,19 @@ class ProductRepository extends Repository
         } else {
             $results = app(ProductFlatRepository::class)->scopeQuery(function ($query) use ($term, $channel, $locale) {
 
+                $query = $query->distinct()
+                    ->addSelect('product_flat.*')
+                    ->join('product_flat as variants', 'product_flat.id', '=', DB::raw('COALESCE(' . DB::getTablePrefix() . 'variants.parent_id, ' . DB::getTablePrefix() . 'variants.id)'))
+                    ->where('product_flat.channel', $channel)
+                    ->where('product_flat.locale', $locale)
+                    ->whereNotNull('product_flat.url_key');
+
                 if (! core()->getConfigData('catalog.products.homepage.out_of_stock_items')) {
                     $query = $this->checkOutOfStockItem($query);
                 }
 
-                return $query->distinct()
-                    ->addSelect('product_flat.*')
-                    ->where('product_flat.status', 1)
+                return $query->where('product_flat.status', 1)
                     ->where('product_flat.visible_individually', 1)
-                    ->where('product_flat.channel', $channel)
-                    ->where('product_flat.locale', $locale)
-                    ->whereNotNull('product_flat.url_key')
                     ->where(function ($subQuery) use ($term) {
                         $queries = explode('_', $term);
 
@@ -529,9 +531,9 @@ class ProductRepository extends Repository
     public function searchSimpleProducts($term)
     {
         return app(ProductFlatRepository::class)->scopeQuery(function ($query) use ($term) {
-            $channel = request()->get('channel') ?: (core()->getCurrentChannelCode() ?: core()->getDefaultChannelCode());
+            $channel = core()->getRequestedChannelCode();
 
-            $locale = request()->get('locale') ?: app()->getLocale();
+            $locale = core()->getRequestedLocaleCode();
 
             return $query->distinct()
                 ->addSelect('product_flat.*')
@@ -840,13 +842,14 @@ class ProductRepository extends Repository
     }
 
     /**
-     * Check out of stock items.
+     * Check out of stock items. This method needed `variants` alias in
+     * the `product_flat` query.
      *
-     * @param Webkul\Product\Models\ProductFlat
-     *
-     * @return Model
-    */
-    public function checkOutOfStockItem($query) {
+     * @param  Webkul\Product\Models\ProductFlat  $query
+     * @return Illuminate\Database\Eloquent\Builder
+     */
+    public function checkOutOfStockItem($query)
+    {
         return $query
             ->leftJoin('products as ps', 'product_flat.product_id', '=', 'ps.id')
             ->leftJoin('product_inventories as pv', 'product_flat.product_id', '=', 'pv.product_id')
@@ -865,7 +868,6 @@ class ProductRepository extends Repository
                                 ->selectRaw('SUM(' . DB::getTablePrefix() . 'product_inventories.qty)')
                                 ->from('product_flat')
                                 ->leftJoin('product_inventories', 'product_inventories.product_id', '=', 'product_flat.product_id')
-                                ->join('product_flat as variants', 'product_flat.id', '=', DB::raw('COALESCE(' . DB::getTablePrefix() . 'variants.parent_id, ' . DB::getTablePrefix() . 'variants.id)'))
                                 ->whereRaw(DB::getTablePrefix() . 'product_flat.parent_id = variants.id');
                         }, '>', 0);
                     });

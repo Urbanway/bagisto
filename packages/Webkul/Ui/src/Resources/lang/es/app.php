@@ -12,11 +12,20 @@ return [
             'delete-category-product' => 'Las categorías seleccionadas contienen productos. Al realizar esta acción, se eliminarán los productos relacionados. ¿De verdad quieres realizar esta acción?'
         ],
 
+        'error' => [
+            'multiple-sort-keys-error' => 'Fatal Error! Multiple sort keys found, please resolve the URL manually',
+            'multiple-search-keys-error' => 'Multiple search keys found, please resolve the URL manually',
+        ],
+
         'zero-index' => 'Las columnas de índice solo pueden tener valores superiores a cero',
         'no-records' => 'No se encontraron registros',
         'filter-fields-missing' => 'Algunos de los campos obligatorios son nulos, verifique la columna, la condición y el valor correctamente',
         'click_on_action' => '¿De verdad quieres realizar esta acción?',
         'search' => 'Busque Aquí...',
+        'search-title' => 'Buscar',
+        'channel' => 'Canal',
+        'locale' => 'Lugar',
+        'customer-group' => 'grupo de clientes',
         'filter' => 'Filtrar',
         'column' => 'Seleccione la columna',
         'condition' => 'Seleccionar condición',
@@ -36,6 +45,9 @@ return [
         'items-per-page' => 'Artículos por página',
         'value-here' => 'Valor aquí',
         'numeric-value-here' => 'Valor numérico aquí',
-        'submit' => 'Enviar'
+        'submit' => 'Enviar',
+        'edit' => 'Editar',
+        'delete' => 'Borrar',
+        'view' => 'Ver',
     ]
 ];

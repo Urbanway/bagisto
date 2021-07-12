@@ -150,6 +150,21 @@ class CategoryRepository extends Repository
     }
 
     /**
+     * Retrive category from slug.
+     *
+     * @param string $slug
+     * @return \Webkul\Category\Contracts\Category
+     */
+    public function findBySlug($slug)
+    {
+        $category = $this->model->whereTranslation('slug', $slug)->first();
+
+        if ($category) {
+            return $category;
+        }
+    }
+
+    /**
      * Find by path.
      *
      * @param  string  $urlPath
@@ -277,7 +292,7 @@ class CategoryRepository extends Repository
      */
     private function setSameAttributeValueToAllLocale(array $data, ...$attributeNames)
     {
-        $requestedLocale = request()->get('locale') ?: app()->getLocale();
+        $requestedLocale = core()->getRequestedLocaleCode();
 
         $model = app()->make($this->model());
 

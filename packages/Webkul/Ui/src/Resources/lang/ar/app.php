@@ -12,11 +12,20 @@ return [
             'delete-category-product' => 'The selected categories contains products. Performing this action will remove the related products. Do you really want to perform this action?'
         ],
 
+        'error' => [
+            'multiple-sort-keys-error' => 'Fatal Error! Multiple sort keys found, please resolve the URL manually',
+            'multiple-search-keys-error' => 'Multiple search keys found, please resolve the URL manually',
+        ],
+
         'zero-index' => 'يمكن أن تحتوي أعمدة الفهرس على قيم أكبر من الصفر فقط',
         'no-records' => 'لا توجد سجلات',
         'filter-fields-missing' => 'بعض الحقل المطلوب هو لاغ ، رجاء تفقد عمود ، حالة و قيمة صحيح',
         'click_on_action' => 'هل تريد حقا أن تؤدي هذا العمل؟',
         'search' => '...ابحث هنا',
+        'search-title' => 'يبحث',
+        'channel' => 'قناة',
+        'locale' => 'لغة',
+        'customer-group' => 'مجموعة العملاء',
         'filter' => 'منقي',
         'column' => 'حدد العمود',
         'condition' => 'حدد الشرط',
@@ -36,6 +45,9 @@ return [
         'items-per-page' => 'مواد لكل صفحة',
         'value-here' => 'القيمة هنا',
         'numeric-value-here' => 'القيمة العددية هنا',
-        'submit' => 'إرسال'
+        'submit' => 'إرسال',
+        'edit' => 'تعديل',
+        'delete' => 'حذف',
+        'view' => 'رأي',
     ]
 ];

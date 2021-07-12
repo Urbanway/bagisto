@@ -2,14 +2,13 @@
 
 namespace Webkul\Sales\Repositories;
 
-use Webkul\Sales\Contracts\Order;
+use Illuminate\Container\Container as App;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Webkul\Core\Eloquent\Repository;
-use Illuminate\Support\Facades\Event;
-use Webkul\Shop\Generators\Sequencer;
-use Illuminate\Container\Container as App;
-use Webkul\Shop\Generators\OrderNumberIdSequencer;
+use Webkul\Sales\Contracts\Order;
+use Webkul\Sales\Generators\OrderSequencer;
 
 class OrderRepository extends Repository
 {
@@ -213,19 +212,7 @@ class OrderRepository extends Repository
      */
     public function generateIncrementId()
     {
-        /**
-         * @var $generatorClass Sequencer
-         */
-        $generatorClass = core()->getConfigData('sales.orderSettings.order_number.order_number_generator-class') ?: false;
-
-        if ($generatorClass !== false
-            && class_exists($generatorClass)
-            && in_array(Sequencer::class, class_implements($generatorClass), true)
-        ) {
-            return $generatorClass::generate();
-        }
-
-        return OrderNumberIdSequencer::generate();
+        return app(OrderSequencer::class)->resolveGeneratorClass();
     }
 
     /**
@@ -302,20 +289,25 @@ class OrderRepository extends Repository
      * Update order status.
      *
      * @param  \Webkul\Sales\Contracts\Order  $order
+     * @param  string $orderState
      * @return void
      */
-    public function updateOrderStatus($order)
+    public function updateOrderStatus($order, $orderState = null)
     {
-        $status = 'processing';
+        if (!empty($orderState)) {
+            $status = $orderState;
+        } else {
+            $status = "processing";
 
-        if ($this->isInCompletedState($order)) {
-            $status = 'completed';
-        }
+            if ($this->isInCompletedState($order)) {
+                $status = 'completed';
+            }
 
-        if ($this->isInCanceledState($order)) {
-            $status = 'canceled';
-        } elseif ($this->isInClosedState($order)) {
-            $status = 'closed';
+            if ($this->isInCanceledState($order)) {
+                $status = 'canceled';
+            } elseif ($this->isInClosedState($order)) {
+                $status = 'closed';
+            }
         }
 
         $order->status = $status;

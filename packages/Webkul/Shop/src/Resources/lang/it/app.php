@@ -261,11 +261,14 @@ return [
                     'submit' => 'Salva Indirizzo',
                     'success' => 'Indirizzo aggiornato con successo.',
                 ],
+
                 'delete' => [
                     'success' => 'Indirizzo eliminato con successo',
                     'failure' => 'L\'indirizzo non può essere eliminato',
                     'wrong-password' => 'Password errata !'
-                ]
+                ],
+
+                'default-address' => 'Default Address',
             ],
 
             'order' => [
@@ -325,6 +328,8 @@ return [
                     'invoice-id' => 'Fattura Nro',
                     'order-id' => 'Ordine Nro',
                     'order-date' => 'Ordine Data',
+                    'invoice-date' => 'Data fattura',
+                    'payment-terms' => 'Termini di pagamento',
                     'bill-to' => 'Fatturato a',
                     'ship-to' => 'Spedito a',
                     'contact' => 'Contatto',
@@ -384,7 +389,16 @@ return [
 
                 'view' => [
                     'page-tile' => 'Recensione #:id',
-                ]
+                ],
+
+                'delete' => [
+                    'confirmation-message' => 'Sei sicuro di voler eliminare questa recensione?',
+                ],
+
+                'delete-all' => [
+                    'title' => 'Cancella tutto',
+                    'confirmation-message' => 'Sei sicuro di voler eliminare tutte le recensioni?',
+                ],
             ]
         ]
     ],
@@ -442,6 +456,7 @@ return [
         'compare_options' => 'Compare Options',
         'wishlist-options' => 'Wishlist Options',
         'offers' => 'Buy :qty for :price each and save :discount%',
+        'tax-inclusive' => 'Inclusive of all taxes',
     ],
 
     // 'reviews' => [
@@ -497,7 +512,7 @@ return [
             'event' => [
                 'expired' => 'Questo evento è terminato.'
             ],
-            'minimum-order-message' => 'Minimum order amount is :amount'
+            'minimum-order-message' => 'L\'importo minimo dell\'ordine è :amount'
         ],
 
         'onepage' => [

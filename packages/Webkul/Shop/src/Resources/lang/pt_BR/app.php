@@ -256,11 +256,14 @@ return [
                     'submit' => 'Salvar Endereço',
                     'success' => 'Endereço Atualizado com sucesso.'
                 ],
+
                 'delete' => [
                     'success' => 'Endereço Excluído com sucesso',
                     'failure' => 'Endereço não pode ser adicionado',
                     'wrong-password' => 'Wrong Password !'
-                ]
+                ],
+
+                'default-address' => 'Default Address',
             ],
 
             'order' => [
@@ -320,6 +323,8 @@ return [
                     'invoice-id' => 'Fatura Id',
                     'order-id' => 'Pedido Id',
                     'order-date' => 'Pedido Date',
+                    'invoice-date' => 'Data da fatura',
+                    'payment-terms' => 'Termos de pagamento',
                     'bill-to' => 'Cobrança de',
                     'ship-to' => 'Enviar para',
                     'contact' => 'Contato',
@@ -378,7 +383,16 @@ return [
 
                 'view' => [
                     'page-tile' => 'Avaliação #:id',
-                ]
+                ],
+
+                'delete' => [
+                    'confirmation-message' => 'Tem certeza de que deseja excluir este comentário?',
+                ],
+
+                'delete-all' => [
+                    'title' => 'Apagar tudo',
+                    'confirmation-message' => 'Tem certeza de que deseja excluir todos os comentários?',
+                ],
             ]
         ]
     ],
@@ -432,6 +446,7 @@ return [
         'compare_options' => 'Compare Options',
         'wishlist-options' => 'Wishlist Options',
         'offers' => 'Buy :qty for :price each and save :discount%',
+        'tax-inclusive' => 'Inclusive of all taxes',
     ],
 
     // 'reviews' => [
@@ -489,7 +504,7 @@ return [
             'event' => [
                 'expired' => 'This event has been expired.'
             ],
-            'minimum-order-message' => 'Minimum order amount is :amount'
+            'minimum-order-message' => 'O valor mínimo do pedido é :amount'
         ],
 
         'onepage' => [

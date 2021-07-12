@@ -263,11 +263,14 @@ return [
                     'submit' => 'احفظ العنوان',
                     'success' => 'العنوان تم تحديثه بنجاح.'
                 ],
+
                 'delete' => [
                     'success' => 'تم حذف العنوان بنجاح.',
                     'failure' => 'لا يمكن حذف العنوان',
                     'wrong-password' => 'كلمة مرور خاطئة !'
-                ]
+                ],
+
+                'default-address' => 'Default Address',
             ],
 
             'order' => [
@@ -327,6 +330,8 @@ return [
                     'invoice-id' => 'رقم الفاتورة',
                     'order-id' => 'ترتيب ',
                     'order-date' => 'تاريخ الطلب',
+                    'invoice-date' => 'تاريخ الفاتورة',
+                    'payment-terms' => 'شروط الدفع',
                     'bill-to' => 'الفاتورة إلى',
                     'ship-to' => 'يشحن إلى',
                     'contact' => 'معلومات الإتصال',
@@ -386,7 +391,16 @@ return [
 
                 'view' => [
                     'page-tile' => '#:id مراجعة',
-                ]
+                ],
+
+                'delete' => [
+                    'confirmation-message' => 'هل أنت متأكد أنك تريد حذف هذه المراجعة؟',
+                ],
+
+                'delete-all' => [
+                    'title' => 'حذف الكل',
+                    'confirmation-message' => 'هل أنت متأكد أنك تريد حذف جميع المراجعات؟',
+                ],
             ]
         ]
     ],
@@ -445,6 +459,7 @@ return [
         'compare_options' => 'قارن الخيارات',
         'wishlist-options' => 'Wishlist Options',
         'offers' => 'Buy :qty for :price each and save :discount%',
+        'tax-inclusive' => 'Inclusive of all taxes',
     ],
 
     // 'reviews' => [
@@ -500,7 +515,7 @@ return [
             'event' => [
                 'expired' => 'This event has been expired.'
             ],
-            'minimum-order-message' => 'Minimum order amount is :amount'
+            'minimum-order-message' => 'الحد الأدنى لمبلغ الطلب هو :amount'
         ],
 
         'onepage' => [
