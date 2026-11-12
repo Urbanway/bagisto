@@ -1,14 +1,38 @@
 <?php
 
-use Faker\Generator as Faker;
+namespace Webkul\Core\Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Webkul\Core\Enums\CurrencyPositionEnum;
 use Webkul\Core\Models\Currency;
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
-$factory->define(Currency::class, function (Faker $faker, array $attributes) {
+class CurrencyFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = Currency::class;
 
-    return [
-        'code' => $faker->unique()->currencyCode,
-        'name' => $faker->word,
-    ];
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        do {
+            $currencyCode = $this->faker->unique()->currencyCode;
+        } while (Currency::query()
+            ->where('code', $currencyCode)
+            ->exists());
 
-});
+        return [
+            'code' => $currencyCode,
+            'name' => $this->faker->word,
+            'decimal' => 2,
+            'group_separator' => ',',
+            'decimal_separator' => '.',
+            'currency_position' => CurrencyPositionEnum::LEFT->value,
+        ];
+    }
+}

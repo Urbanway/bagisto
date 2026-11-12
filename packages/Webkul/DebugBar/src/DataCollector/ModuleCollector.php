@@ -2,20 +2,20 @@
 
 namespace Webkul\DebugBar\DataCollector;
 
-use Illuminate\Support\Str;
+use DebugBar\DataCollector\AssetProvider;
 use DebugBar\DataCollector\DataCollector;
 use DebugBar\DataCollector\DataCollectorInterface;
 use DebugBar\DataCollector\Renderable;
-use DebugBar\DataCollector\AssetProvider;
-use Konekt\Concord\Facades\Concord;
+use DebugBar\DataFormatter\DataFormatter;
 use Illuminate\Contracts\Events\Dispatcher;
-use DebugBar\DataCollector\PDO\PDOCollector;
-use Debugbar;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Str;
+use Konekt\Concord\Facades\Concord;
 
 /**
  * Collector for Bagisto's Module Collector
  */
-class ModuleCollector extends DataCollector implements DataCollectorInterface, Renderable, AssetProvider
+class ModuleCollector extends DataCollector implements AssetProvider, DataCollectorInterface, Renderable
 {
     public $models = [];
 
@@ -26,15 +26,12 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
     public $count = 0;
 
     /**
-     * @param  Dispatcher  $events
-     * @param  PDOCollector  $pdoCollector
      * @return void
      */
     public function __construct(
         Dispatcher $events,
-        PDOCollector $pdoCollector
-    )
-    {
+        DataFormatter $formatter
+    ) {
         $events->listen('eloquent.*', function ($event, $models) {
             if (Str::contains($event, 'eloquent.retrieved')) {
                 foreach (array_filter($models) as $model) {
@@ -52,19 +49,19 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
         });
 
         app()['db']->listen(
-            function ($query, $bindings = null, $time = null, $connectionName = null) use ($pdoCollector) {
+            function ($query, $bindings = null, $time = null, $connectionName = null) use ($formatter) {
                 $this->queries[] = [
-                    'sql'          => $this->addQueryBindings($query),
-                    'duration'     => $query->time,
-                    "duration_str" => $pdoCollector->formatDuration($query->time),
-                    "connection"   => $query->connection->getDatabaseName()
+                    'sql' => $this->addQueryBindings($query),
+                    'duration' => $query->time,
+                    'duration_str' => $formatter->formatDuration($query->time),
+                    'connection' => $query->connection->getDatabaseName(),
                 ];
             }
         );
     }
-    
+
     /**
-     * @param  \Illuminate\Database\Events\QueryExecuted  $query
+     * @param  QueryExecuted  $query
      * @return string
      */
     public function addQueryBindings($query)
@@ -79,8 +76,11 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
                     ? "/\?(?=(?:[^'\\\']*'[^'\\\']*')*[^'\\\']*$)/"
                     : "/:{$key}(?=(?:[^'\\\']*'[^'\\\']*')*[^'\\\']*$)/";
 
-                if (! is_int($binding) && ! is_float($binding)) {
-                    $binding = $query->connection->getPdo()->quote($binding);
+                if (
+                    ! is_int($binding)
+                    && ! is_float($binding)
+                ) {
+                    $binding = $query->connection->getPdo()->quote($binding ?? '');
                 }
 
                 $sql = preg_replace($regex, $binding, $sql, 1);
@@ -93,20 +93,23 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
     /**
      * Check bindings for illegal (non UTF-8) strings, like Binary data.
      *
-     * @param array  $bindings
+     * @param  array  $bindings
      * @return mixed
      */
     public function checkBindings($bindings)
     {
         foreach ($bindings as &$binding) {
-            if (is_string($binding) && ! mb_check_encoding($binding, 'UTF-8')) {
+            if (
+                is_string($binding)
+                && ! mb_check_encoding($binding, 'UTF-8')
+            ) {
                 $binding = '[BINARY DATA]';
             }
         }
 
         return $bindings;
     }
-    
+
     /**
      * @param  string  $name
      * @param  string  $path
@@ -124,10 +127,10 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
     /**
      * {@inheritdoc}
      */
-    public function collect()
+    public function collect(): array
     {
         $modules = [];
-        
+
         foreach (Concord::getModules() as $moduleId => $module) {
             $models = $this->getModels($module->getNamespaceRoot());
 
@@ -135,18 +138,22 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
 
             $queries = $this->getQueries($module->getNamespaceRoot());
 
-            if (count($models) || count($views) || count($queries)) {
+            if (
+                count($models)
+                || count($views)
+                || count($queries)
+            ) {
                 $modules[] = [
-                    'name'    => $module->getNamespaceRoot(),
-                    'models'  => $models,
-                    'views'   => $views,
+                    'name' => $module->getNamespaceRoot(),
+                    'models' => $models,
+                    'views' => $views,
                     'queries' => $queries,
                 ];
             }
         }
 
         $data = [
-            'count'   => count($modules),
+            'count' => count($modules),
             'modules' => $modules,
         ];
 
@@ -162,8 +169,8 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
         $models = [];
 
         foreach ($this->models as $model => $count) {
-            if (strpos($model, $classNamespace . '\\') !== false) {
-                $models[] = $model . ' (' . $count . ')';
+            if (strpos($model, $classNamespace.'\\') !== false) {
+                $models[] = $model.' ('.$count.')';
             }
         }
 
@@ -178,18 +185,18 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
     {
         $viewNamespace = Str::lower(class_basename($classNamespace));
 
-        $classNamespace = str_replace('\\', '/', $classNamespace) . '/';
-        
+        $classNamespace = str_replace('\\', '/', $classNamespace).'/';
+
         $views = [];
 
         foreach ($this->views as $view) {
             if (strpos($view, $classNamespace) !== false) {
                 $views[] = $view;
-            } elseif (strpos($view, 'resources/themes/' . $viewNamespace . '/') !== false) {
+            } elseif (strpos($view, 'resources/themes/'.$viewNamespace.'/') !== false) {
                 $views[] = $view;
-            } elseif (strpos($view, 'resources/admin-themes/' . $viewNamespace . '/') !== false) {
+            } elseif (strpos($view, 'resources/admin-themes/'.$viewNamespace.'/') !== false) {
                 $views[] = $view;
-            } elseif (strpos($view, 'resources/vendor/views/' . $viewNamespace . '/') !== false) {
+            } elseif (strpos($view, 'resources/vendor/views/'.$viewNamespace.'/') !== false) {
                 $views[] = $view;
             }
         }
@@ -229,7 +236,7 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
         $tables = [];
 
         foreach (Concord::getModelBindings() as $contract => $model) {
-            if (strpos($model, $classNamespace . '\\') !== false) {
+            if (strpos($model, $classNamespace.'\\') !== false) {
                 $tables[] = app($model)->getTable();
             }
         }
@@ -240,7 +247,7 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
     /**
      * {@inheritDoc}
      */
-    public function getName()
+    public function getName(): string
     {
         return 'modules';
     }
@@ -248,33 +255,30 @@ class ModuleCollector extends DataCollector implements DataCollectorInterface, R
     /**
      * {@inheritDoc}
      */
-    public function getWidgets()
+    public function getWidgets(): array
     {
         return [
-            "modules"       => [
-                "icon"    => "cubes",
-                "widget"  => "PhpDebugBar.Widgets.ModulesWidget",
-                "map"     => "modules",
-                "default" => "[]",
+            'modules' => [
+                'icon' => 'cubes',
+                'widget' => 'PhpDebugBar.Widgets.ModulesWidget',
+                'map' => 'modules',
+                'default' => '[]',
             ],
 
-            "modules:badge" => [
-                "map"     => "modules.count",
-                "default" => 0,
+            'modules:badge' => [
+                'map' => 'modules.count',
+                'default' => 0,
             ],
         ];
     }
 
-    /**
-     * @return array
-     */
-    public function getAssets()
+    public function getAssets(): array
     {
         return [
-            'base_path' => __DIR__ . '/../Resources/',
-            'base_url'  => __DIR__ . '/../Resources/',
-            'css'       => 'widgets/modules/widget.css',
-            'js'        => 'widgets/modules/widget.js'
+            'base_path' => __DIR__.'/../Resources/',
+            'base_url' => __DIR__.'/../Resources/',
+            'css' => 'widgets/modules/widget.css',
+            'js' => 'widgets/modules/widget.js',
         ];
     }
 }

@@ -2,87 +2,127 @@
 
 namespace Webkul\Shop\Http\Controllers;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Webkul\Core\Repositories\SliderRepository;
-use Webkul\Product\Repositories\ProductRepository;
+use Illuminate\View\View;
 use Webkul\Category\Repositories\CategoryRepository;
+use Webkul\Marketing\Repositories\URLRewriteRepository;
+use Webkul\Product\Enums\SearchContextEnum;
+use Webkul\Product\Repositories\ProductRepository;
+use Webkul\Theme\Repositories\SectionRepository;
 
 class ProductsCategoriesProxyController extends Controller
 {
     /**
-     * Category repository instance.
-     *
-     * @var \Webkul\Category\Repositories\CategoryRepository
+     * Using const variable for status.
      */
-    protected $categoryRepository;
-
-    /**
-     * Product repository instance.
-     *
-     * @var \Webkul\Product\Repositories\ProductRepository
-     */
-    protected $productRepository;
-
-    /**
-     * Slider repository instance.
-     *
-     * @var \Webkul\Core\Repositories\SliderRepository
-     */
-    protected $sliderRepository;
+    const STATUS = 1;
 
     /**
      * Create a new controller instance.
-     *
-     * @param  \Webkul\Category\Repositories\CategoryRepository  $categoryRepository
-     * @param  \Webkul\Product\Repositories\ProductRepository  $productRepository
-     * @return void
      */
     public function __construct(
-        CategoryRepository $categoryRepository,
-        ProductRepository $productRepository,
-        SliderRepository $sliderRepository
-    ) {
-        $this->categoryRepository = $categoryRepository;
-
-        $this->productRepository = $productRepository;
-
-        $this->sliderRepository = $sliderRepository;
-
-        parent::__construct();
-    }
+        protected CategoryRepository $categoryRepository,
+        protected ProductRepository $productRepository,
+        protected SectionRepository $sectionRepository,
+        protected URLRewriteRepository $urlRewriteRepository
+    ) {}
 
     /**
-     * Show product or category view. If neither category nor product matches, abort with code 404.
+     * Show the category or product a storefront slug names, or the home page for a path that is no slug, redirecting a
+     * nested category path or a rewritten url, and answer not found otherwise, a path under the admin url included.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\View\View|\Exception
+     * @return View|RedirectResponse
      */
     public function index(Request $request)
     {
-        $slugOrPath = trim($request->getPathInfo(), '/');
-
-        $slugOrPath = urldecode($slugOrPath);
-
-        // support url for chinese, japanese, arbic and english with numbers.
-        if (preg_match('/^([\x{0621}-\x{064A}\x{4e00}-\x{9fa5}\x{3402}-\x{FA6D}\x{3041}-\x{30A0}\x{30A0}-\x{31FF}_a-z0-9-]+\/?)+$/u', $slugOrPath)) {
-
-            if ($category = $this->categoryRepository->findByPath($slugOrPath)) {
-
-                return view($this->_config['category_view'], compact('category'));
-            }
-
-            if ($product = $this->productRepository->findBySlug($slugOrPath)) {
-
-                $customer = auth()->guard('customer')->user();
-
-                return view($this->_config['product_view'], compact('product', 'customer'));
-            }
-
+        if (is_admin_request($request)) {
             abort(404);
         }
 
-        $sliderData = $this->sliderRepository->getActiveSliders();
+        $slugOrURLKey = urldecode(trim($request->getPathInfo(), '/'));
 
-        return view('shop::home.index', compact('sliderData'));
+        if (! $this->isSlug($slugOrURLKey)) {
+            $sections = $this->sectionRepository->getRenderable(
+                core()->getCurrentChannel()->id,
+                core()->getCurrentChannel()->theme
+            );
+
+            return view('shop::home.index', compact('sections'));
+        }
+
+        $category = $this->categoryRepository->findBySlug($slugOrURLKey);
+
+        if ($category) {
+            if (! $category->isAvailableInChannel()) {
+                abort(404);
+            }
+
+            return view('shop::categories.view', [
+                'category' => $category,
+                'params' => [
+                    'sort' => request()->query('sort'),
+                    'limit' => request()->query('limit'),
+                    'mode' => request()->query('mode'),
+                ],
+            ]);
+        }
+
+        $product = $this->productRepository
+            ->setSearchContext(SearchContextEnum::STOREFRONT)
+            ->findBySlug($slugOrURLKey);
+
+        if ($product) {
+            if (
+                ! $product->url_key
+                || ! $product->visible_individually
+                || ! $product->status
+                || ! $product->isAvailableInChannel()
+            ) {
+                abort(404);
+            }
+
+            $productURLRewrite = $this->urlRewriteRepository->findOneWhere([
+                'entity_type' => 'product',
+                'request_path' => $slugOrURLKey,
+                'locale' => app()->getLocale(),
+            ]);
+
+            if ($productURLRewrite) {
+                return redirect()->to($productURLRewrite->target_path, $productURLRewrite->redirect_type);
+            }
+
+            return view('shop::products.view', compact('product'));
+        }
+
+        if (str_contains($slugOrURLKey, '/')) {
+            $trimmedSlug = last(explode('/', $slugOrURLKey));
+
+            $category = $this->categoryRepository->findBySlug($trimmedSlug);
+
+            if ($category?->isAvailableInChannel()) {
+                return redirect()->to($trimmedSlug, 301);
+            }
+        }
+
+        $urlRewrite = $this->urlRewriteRepository->findOneWhere([
+            'request_path' => $slugOrURLKey,
+            'locale' => app()->getLocale(),
+        ]);
+
+        if ($urlRewrite) {
+            return redirect()->to($urlRewrite->target_path, $urlRewrite->redirect_type);
+        }
+
+        abort(404);
+    }
+
+    /**
+     * Whether a path is a slug of letters, digits and marks in any script, such as English, Chinese, Japanese or
+     * Arabic, joined by dashes and underscores, its segments separated by slashes.
+     */
+    protected function isSlug(string $path): bool
+    {
+        return (bool) preg_match('/^([\p{L}\p{N}\p{M}\x{0900}-\x{097F}\x{0590}-\x{05FF}\x{0600}-\x{06FF}\x{0400}-\x{04FF}_-]+\/?)+$/u', $path);
     }
 }

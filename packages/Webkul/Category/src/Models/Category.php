@@ -2,36 +2,52 @@
 
 namespace Webkul\Category\Models;
 
-use Webkul\Core\Eloquent\TranslatableModel;
-use Kalnoy\Nestedset\NodeTrait;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Webkul\Category\Contracts\Category as CategoryContract;
+use Kalnoy\Nestedset\NodeTrait;
 use Webkul\Attribute\Models\AttributeProxy;
-use Webkul\Category\Repositories\CategoryRepository;
+use Webkul\Category\Contracts\Category as CategoryContract;
+use Webkul\Category\Database\Factories\CategoryFactory;
+use Webkul\Core\Eloquent\TranslatableModel;
 use Webkul\Product\Models\ProductProxy;
 
-/**
- * Class Category
- *
- * @package Webkul\Category\Models
- *
- * @property-read string $url_path maintained by database triggers
- */
 class Category extends TranslatableModel implements CategoryContract
 {
-    use NodeTrait;
+    use HasFactory, NodeTrait;
 
+    /**
+     * What separates the steps of the chain of ancestors a category is read by.
+     */
+    const PATH_SEPARATOR = ' › ';
+
+    /**
+     * What separates one category from the next where several are read together.
+     */
+    const PATH_DELIMITER = ', ';
+
+    /**
+     * Translated attributes.
+     *
+     * @var array
+     */
     public $translatedAttributes = [
         'name',
         'description',
         'slug',
-        'url_path',
         'meta_title',
         'meta_description',
         'meta_keywords',
+        'logo_alt',
+        'banner_alt',
     ];
 
+    /**
+     * Fillable.
+     *
+     * @var array
+     */
     protected $fillable = [
         'position',
         'status',
@@ -40,102 +56,159 @@ class Category extends TranslatableModel implements CategoryContract
         'additional',
     ];
 
+    /**
+     * Attribute casting.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'status' => 'boolean',
+        'position' => 'integer',
+        'additional' => 'array',
+    ];
+
+    /**
+     * Eager loading.
+     *
+     * @var array
+     */
     protected $with = ['translations'];
 
     /**
-     * Get image url for the category image.
-     */
-    public function image_url()
-    {
-        if (! $this->image)
-            return;
-
-        return Storage::url($this->image);
-    }
-
-    /**
-     * Get image url for the category image.
-     */
-    public function getImageUrlAttribute()
-    {
-        return $this->image_url();
-    }
-
-     /**
-     * The filterable attributes that belong to the category.
-     */
-    public function filterableAttributes()
-    {
-        return $this->belongsToMany(AttributeProxy::modelClass(), 'category_filterable_attributes')->with(['options' => function($query) {
-            $query->orderBy('sort_order');
-        }]);
-    }
-
-    /**
-     * Getting the root category of a category
+     * Appends.
      *
-     * @return Category
+     * @var array
      */
-    public function getRootCategory(): Category
-    {
-        return Category::where([
-            ['parent_id', '=', null],
-            ['_lft', '<=', $this->_lft],
-            ['_rgt', '>=', $this->_rgt],
-        ])->first();
-    }
-
-    /**
-     * Returns all categories within the category's path
-     *
-     * @return Category[]
-     */
-    public function getPathCategories(): array
-    {
-        $category = $this->findInTree();
-
-        $categories = [$category];
-
-        while (isset($category->parent)) {
-            $category = $category->parent;
-            $categories[] = $category;
-        }
-
-        return array_reverse($categories);
-    }
-
-    /**
-     * Finds and returns the category within a nested category tree
-     * will search in root category by default
-     * is used to minimize the numbers of sql queries for it only uses the already cached tree
-     *
-     * @param Category[] $categoryTree
-     * @return Category
-     */
-    public function findInTree($categoryTree = null): Category
-    {
-        if (! $categoryTree) {
-            $categoryTree = app(CategoryRepository::class)->getVisibleCategoryTree($this->getRootCategory()->id);
-        }
-
-        $category = $categoryTree->first();
-
-        if (! $category) {
-            throw new NotFoundHttpException('category not found in tree');
-        }
-
-        if ($category->id === $this->id) {
-            return $category;
-        }
-
-        return $this->findInTree($category->children);
-    }
+    protected $appends = ['logo_url', 'banner_url', 'url'];
 
     /**
      * The products that belong to the category.
      */
-    public function products()
+    public function products(): BelongsToMany
     {
         return $this->belongsToMany(ProductProxy::modelClass(), 'product_categories');
+    }
+
+    /**
+     * The filterable attributes that belong to the category.
+     */
+    public function filterableAttributes(): BelongsToMany
+    {
+        return $this->belongsToMany(AttributeProxy::modelClass(), 'category_filterable_attributes')
+            ->where('is_filterable', 1)
+            ->with([
+                'options' => function ($query) {
+                    $query->orderBy('sort_order');
+                },
+                'translations',
+                'options.translations',
+            ]);
+    }
+
+    /**
+     * Is within the given channel's tree, defaulting to the current one.
+     * A category belongs to a channel by sitting under that channel's root.
+     */
+    public function isAvailableInChannel(?int $channelId = null): bool
+    {
+        $channel = is_null($channelId)
+            ? core()->getCurrentChannel()
+            : core()->getAllChannels()->firstWhere('id', $channelId);
+
+        if (! $root = $channel?->root_category) {
+            return false;
+        }
+
+        return $this->isSelfOrDescendantOf($root);
+    }
+
+    /**
+     * Get url attribute.
+     *
+     * @return string
+     */
+    public function getUrlAttribute()
+    {
+        if ($categoryTranslation = $this->translate(core()->getCurrentLocale()->code)) {
+            return url($categoryTranslation->slug);
+        }
+
+        return url($this->translate(core()->getDefaultLocaleCodeFromDefaultChannel())?->slug);
+    }
+
+    /**
+     * Get image url for the category image.
+     *
+     * @return string
+     */
+    public function getLogoUrlAttribute()
+    {
+        if (! $this->logo_path) {
+            return;
+        }
+
+        return Storage::url($this->logo_path);
+    }
+
+    /**
+     * Get banner url attribute.
+     *
+     * @return string
+     */
+    public function getBannerUrlAttribute()
+    {
+        if (! $this->banner_path) {
+            return;
+        }
+
+        return Storage::url($this->banner_path);
+    }
+
+    /**
+     * Get the logo file name, without the directory and the extension.
+     *
+     * @return string
+     */
+    public function getLogoFileNameAttribute()
+    {
+        return pathinfo((string) $this->logo_path, PATHINFO_FILENAME);
+    }
+
+    /**
+     * Get the banner file name, without the directory and the extension.
+     *
+     * @return string
+     */
+    public function getBannerFileNameAttribute()
+    {
+        return pathinfo((string) $this->banner_path, PATHINFO_FILENAME);
+    }
+
+    /**
+     * Use fallback for category.
+     */
+    protected function useFallback(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get fallback locale for category.
+     */
+    protected function getFallbackLocale(?string $locale = null): ?string
+    {
+        if ($fallback = core()->getDefaultLocaleCodeFromDefaultChannel()) {
+            return $fallback;
+        }
+
+        return parent::getFallbackLocale();
+    }
+
+    /**
+     * Create a new factory instance for the model.
+     */
+    protected static function newFactory(): Factory
+    {
+        return CategoryFactory::new();
     }
 }

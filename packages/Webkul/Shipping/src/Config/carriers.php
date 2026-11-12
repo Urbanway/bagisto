@@ -1,24 +1,25 @@
 <?php
 
+use Webkul\Shipping\Carriers\FlatRate;
+use Webkul\Shipping\Carriers\Free;
+
 return [
     'flatrate' => [
-        'code'             => 'flatrate',
-        'title'            => 'Flat Rate',
-        'description'      => 'Flat Rate Shipping',
-        'active'           => true,
-        'is_calculate_tax' => true,
-        'default_rate'     => '10',
-        'type'             => 'per_unit',
-        'class'            => 'Webkul\Shipping\Carriers\FlatRate',
+        'code' => 'flatrate',
+        'title' => 'Flat Rate',
+        'description' => 'Flat Rate Shipping',
+        'active' => true,
+        'default_rate' => '10',
+        'type' => 'per_unit',
+        'class' => FlatRate::class,
     ],
 
-    'free'     => [
-        'code'             => 'free',
-        'title'            => 'Free Shipping',
-        'description'      => 'Free Shipping',
-        'active'           => true,
-        'is_calculate_tax' => true,
-        'default_rate'     => '0',
-        'class'            => 'Webkul\Shipping\Carriers\Free',
-    ]
+    'free' => [
+        'code' => 'free',
+        'title' => 'Free Shipping',
+        'description' => 'Free Shipping',
+        'active' => true,
+        'default_rate' => '0',
+        'class' => Free::class,
+    ],
 ];

@@ -3,32 +3,16 @@
 namespace Webkul\Admin\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Factory as ValidationFactory;
+use Webkul\Core\Rules\CommaSeparatedInteger;
+use Webkul\Core\Rules\Decimal;
+use Webkul\Core\Rules\PhoneNumber;
+use Webkul\Core\Rules\PostCode;
+use Webkul\Core\SystemConfig\DependsCondition;
 
 class ConfigurationForm extends FormRequest
 {
-    /*
-        Added custom validator.
-     */
-    public function __construct(ValidationFactory $validationFactory)
-    {
-        /* added custom comma seperated integer validator */
-        $validationFactory->extend(
-            'comma_seperated_integer',
-            function ($attribute, $value, $parameters) {
-                $pages = explode(',', $value);
-                foreach($pages as $page){
-                    if (! is_numeric($page)) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-        );
-    }
-
     /**
-     * Determine if the Configuraion is authorized to make this request.
+     * Determine if the Configuration is authorized to make this request.
      *
      * @return bool
      */
@@ -38,71 +22,97 @@ class ConfigurationForm extends FormRequest
     }
 
     /**
-     * Get the validation rules that apply to the request.
+     * Get the validation rules of every configuration section the request submits a field of, read from
+     * the configuration itself rather than from anything the request describes.
      *
      * @return array
      */
     public function rules()
     {
-        $this->rules = [];
+        return collect(config('core'))
+            ->filter(fn ($item) => $this->submitsFieldOf($item))
+            ->mapWithKeys(function ($item) {
+                return collect($item['fields'])->mapWithKeys(function ($field) use ($item) {
+                    $key = "{$item['key']}.{$field['name']}";
 
-        if (request()->has('catalog.products.storefront.products_per_page')
-            && ! empty(request()->input('catalog.products.storefront.products_per_page'))
-        ) {
-            $this->rules = [
-                'catalog.products.storefront.products_per_page'  => 'comma_seperated_integer',
-            ];
-        }
+                    if ($this->has("{$key}.delete")) {
+                        return [];
+                    }
 
-        if (request()->has('general.design.admin_logo.logo_image')
-            && ! request()->input('general.design.admin_logo.logo_image.delete')
-        ) {
-            $this->rules = array_merge($this->rules, [
-                'general.design.admin_logo.logo_image'  => 'required|mimes:bmp,jpeg,jpg,png,webp|max:5000',
-            ]);
-        }
+                    $condition = new DependsCondition($field['depends'] ?? null);
 
-        if (request()->has('general.design.admin_logo.favicon')
-            && ! request()->input('general.design.admin_logo.favicon.delete')
-        ) {
-            $this->rules = array_merge($this->rules, [
-                'general.design.admin_logo.favicon'  => 'required|mimes:bmp,jpeg,jpg,png,webp|max:5000',
-            ]);
-        }
+                    $sibling = "{$item['key']}.{$condition->fieldName()}";
 
-        if (request()->has('sales.invoice_setttings.invoice_slip_design.logo')
-            && ! request()->input('sales.invoice_setttings.invoice_slip_design.logo.delete')
-        ) {
-            $this->rules = array_merge($this->rules, [
-                'sales.invoice_setttings.invoice_slip_design.logo'  => 'required|mimes:bmp,jpeg,jpg,png,webp|max:5000',
-            ]);
-        }
+                    if (! $condition->permits($this->has($sibling), $this->input($sibling))) {
+                        return [];
+                    }
 
-        return $this->rules;
+                    return [$key => array_merge(
+                        $this->getValidationRules($field['validation'] ?? 'nullable'),
+                        $this->getTypeRules($field['type'] ?? null),
+                    )];
+                })->toArray();
+            })
+            ->toArray();
     }
 
     /**
-     * Get the error messages for the defined validation rules.
+     * The name a validation message calls a configuration field, taken from the field's own title so
+     * a failure reads as the label the admin sees rather than as the stored code.
+     */
+    public function attributes(): array
+    {
+        return collect(config('core'))
+            ->filter(fn ($item) => $this->submitsFieldOf($item))
+            ->flatMap(function ($item) {
+                return collect($item['fields'] ?? [])->mapWithKeys(function ($field) use ($item) {
+                    return ["{$item['key']}.{$field['name']}" => trans($field['title'] ?? '')];
+                });
+            })
+            ->all();
+    }
+
+    /**
+     * Whether the request submits a value for any field of a configuration section.
+     */
+    protected function submitsFieldOf(array $item): bool
+    {
+        return collect($item['fields'] ?? [])
+            ->contains(fn ($field) => $this->has("{$item['key']}.{$field['name']}"));
+    }
+
+    /**
+     * The rules a field's own type implies, so a number cannot be saved as a word or left blank.
      *
+     * @return array<int, string>
+     */
+    protected function getTypeRules(?string $type): array
+    {
+        return match ($type) {
+            'boolean' => ['in:0,1'],
+            'number' => ['numeric'],
+            default => [],
+        };
+    }
+
+    /**
+     * Transform validation rules into an array and map custom validation rules.
+     *
+     * @param  string|array  $validation
      * @return array
      */
-    public function messages()
+    protected function getValidationRules($validation)
     {
-        return [
-            'general.design.admin_logo.logo_image.mimes' => 'Invalid file format. Use only bmp, jpeg, jpg, png and webp.',
-            'catalog.products.storefront.products_per_page.comma_seperated_integer' => 'The "Product Per Page" field must be numeric and may contain comma.'
-        ];
-    }
+        $validations = is_array($validation) ? $validation : explode('|', $validation);
 
-    /**
-     * Set the attribute name.
-     */
-    public function attributes()
-    {
-        return [
-            'general.design.admin_logo.logo_image' => 'Logo Image',
-            'general.design.admin_logo.favicon' => 'Favicon Image',
-            'sales.invoice_setttings.invoice_slip_design.logo' => 'Invoice Logo'
-        ];
+        return array_map(function ($rule) {
+            return match ($rule) {
+                'comma_separated_integer' => new CommaSeparatedInteger,
+                'decimal' => new Decimal,
+                'phone' => new PhoneNumber,
+                'postcode' => new PostCode,
+                default => $rule,
+            };
+        }, $validations);
     }
 }

@@ -2,93 +2,49 @@
 
 namespace Webkul\CatalogRule\Repositories;
 
-use Illuminate\Container\Container as App;
-use Webkul\Core\Eloquent\Repository;
+use Illuminate\Container\Container;
 use Webkul\Attribute\Repositories\AttributeFamilyRepository;
 use Webkul\Attribute\Repositories\AttributeRepository;
+use Webkul\CatalogRule\Contracts\CatalogRule;
 use Webkul\Category\Repositories\CategoryRepository;
+use Webkul\Core\Eloquent\Repository;
+use Webkul\RMA\Repositories\RMARuleRepository;
 use Webkul\Tax\Repositories\TaxCategoryRepository;
 
 class CatalogRuleRepository extends Repository
 {
     /**
-     * AttributeFamilyRepository object
-     *
-     * @var \Webkul\Attribute\Repositories\AttributeFamilyRepository
-     */
-    protected $attributeFamilyRepository;
-
-    /**
-     * AttributeRepository object
-     *
-     * @var \Webkul\Attribute\Repositories\AttributeRepository
-     */
-    protected $attributeRepository;
-
-    /**
-     * CategoryRepository class
-     *
-     * @var \Webkul\Category\Repositories\CategoryRepository
-     */
-    protected $categoryRepository;
-
-    /**
-     * TaxCategoryRepository class
-     *
-     * @var \Webkul\CaTaxtegory\Repositories\axCategoryRepository
-     */
-    protected $taxCategoryRepository;
-
-    /**
      * Create a new repository instance.
      *
-     * @param  \Webkul\Attribute\Repositories\AttributeFamilyRepository  $attributeFamilyRepository
-     * @param  \Webkul\Attribute\Repositories\AttributeRepository  $attributeRepository
-     * @param  \Webkul\Category\Repositories\CategoryRepository  $categoryRepository
-     * @param  \Webkul\Tax\Repositories\TaxCategoryRepository  $taxCategoryRepository
-     * @param  \Illuminate\Container\Container  $app
      * @return void
      */
     public function __construct(
-        AttributeFamilyRepository $attributeFamilyRepository,
-        AttributeRepository $attributeRepository,
-        CategoryRepository $categoryRepository,
-        TaxCategoryRepository $taxCategoryRepository,
-        App $app
-    )
-    {
-        $this->attributeFamilyRepository = $attributeFamilyRepository;
-
-        $this->attributeRepository = $attributeRepository;
-
-        $this->categoryRepository = $categoryRepository;
-
-        $this->taxCategoryRepository = $taxCategoryRepository;
-
-        parent::__construct($app);
+        protected AttributeFamilyRepository $attributeFamilyRepository,
+        protected AttributeRepository $attributeRepository,
+        protected CategoryRepository $categoryRepository,
+        protected TaxCategoryRepository $taxCategoryRepository,
+        protected RMARuleRepository $rmaRuleRepository,
+        Container $container
+    ) {
+        parent::__construct($container);
     }
 
     /**
-     * Specify Model class name
-     *
-     * @return mixed
+     * Specify model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\CatalogRule\Contracts\CatalogRule';
+        return CatalogRule::class;
     }
 
     /**
-     * @param  array  $data
-     * @return \Webkul\CatalogRule\Contracts\CatalogRule
+     * Create.
+     *
+     * @return CatalogRule
      */
     public function create(array $data)
     {
-        $data['starts_from'] = $data['starts_from'] ?: null;
-
-        $data['ends_till'] = $data['ends_till'] ?: null;
-
-        $data['status'] = ! isset($data['status']) ? 0 : 1;
+        $data = $this->transformFormData($data);
 
         $catalogRule = parent::create($data);
 
@@ -100,24 +56,18 @@ class CatalogRuleRepository extends Repository
     }
 
     /**
-     * @param  array  $data
+     * Update.
+     *
      * @param  int  $id
-     * @param  string  $attribute
-     * @return \Webkul\CatalogRule\Contracts\CatalogRule
+     * @return CatalogRule
      */
-    public function update(array $data, $id, $attribute = "id")
+    public function update(array $data, $id)
     {
-        $data['starts_from'] = $data['starts_from'] ?: null;
-
-        $data['ends_till'] = $data['ends_till'] ?: null;
-
-        $data['status'] = ! isset($data['status']) ? 0 : 1;
-
-        $data['conditions'] = $data['conditions'] ?? [];
+        $data = $this->transformFormData($data);
 
         $catalogRule = $this->find($id);
 
-        parent::update($data, $id, $attribute);
+        parent::update($data, $id);
 
         $catalogRule->channels()->sync($data['channels']);
 
@@ -127,7 +77,18 @@ class CatalogRuleRepository extends Repository
     }
 
     /**
-     * Returns attributes for catalog rule conditions
+     * Transform form data.
+     */
+    public function transformFormData(array $data): array
+    {
+        return [
+            ...$data,
+            'conditions' => $data['conditions'] ?? [],
+        ];
+    }
+
+    /**
+     * Returns attributes for catalog rule conditions.
      *
      * @return array
      */
@@ -135,29 +96,29 @@ class CatalogRuleRepository extends Repository
     {
         $attributes = [
             [
-                'key'      => 'product',
-                'label'    => trans('admin::app.promotions.catalog-rules.product-attribute'),
+                'key' => 'product',
+                'label' => trans('admin::app.marketing.promotions.catalog-rules.create.product-attribute'),
                 'children' => [
                     [
-                        'key'     => 'product|category_ids',
-                        'type'    => 'multiselect',
-                        'label'   => trans('admin::app.promotions.catalog-rules.categories'),
+                        'key' => 'product|category_ids',
+                        'type' => 'multiselect',
+                        'label' => trans('admin::app.marketing.promotions.catalog-rules.create.categories'),
                         'options' => $this->categoryRepository->getCategoryTree(),
                     ], [
-                        'key'     => 'product|attribute_family_id',
-                        'type'    => 'select',
-                        'label'   => trans('admin::app.promotions.catalog-rules.attribute_family'),
+                        'key' => 'product|attribute_family_id',
+                        'type' => 'select',
+                        'label' => trans('admin::app.marketing.promotions.catalog-rules.create.attribute-family'),
                         'options' => $this->getAttributeFamilies(),
-                    ]
-                ]
-            ]
+                    ],
+                ],
+            ],
         ];
 
         foreach ($this->attributeRepository->findWhereNotIn('type', ['textarea', 'image', 'file']) as $attribute) {
-            $attributeType = $attribute->type;
-
             if ($attribute->code == 'tax_category_id') {
                 $options = $this->getTaxCategories();
+            } elseif ($attribute->code == 'rma_rule_id') {
+                $options = $this->getRMARules();
             } else {
                 if ($attribute->type === 'select') {
                     $options = $attribute->options()->orderBy('sort_order')->get();
@@ -166,16 +127,10 @@ class CatalogRuleRepository extends Repository
                 }
             }
 
-            if ($attribute->validation == 'decimal')
-                $attributeType = 'decimal';
-
-            if ($attribute->validation == 'numeric')
-                $attributeType = 'integer';
-
             $attributes[0]['children'][] = [
-                'key'     => 'product|' . $attribute->code,
-                'type'    => $attribute->type,
-                'label'   => $attribute->name,
+                'key' => 'product|'.$attribute->code,
+                'type' => $attribute->type,
+                'label' => $attribute->name,
                 'options' => $options,
             ];
         }
@@ -184,26 +139,7 @@ class CatalogRuleRepository extends Repository
     }
 
     /**
-     * Returns all tax categories
-     *
-     * @return array
-     */
-    public function getTaxCategories()
-    {
-        $taxCategories = [];
-
-        foreach ($this->taxCategoryRepository->all() as $taxCategory) {
-            $taxCategories[] = [
-                'id'         => $taxCategory->id,
-                'admin_name' => $taxCategory->name,
-            ];
-        }
-
-        return $taxCategories;
-    }
-
-    /**
-     * Returns all attribute families
+     * Returns all attribute families.
      *
      * @return array
      */
@@ -213,11 +149,47 @@ class CatalogRuleRepository extends Repository
 
         foreach ($this->attributeFamilyRepository->all() as $attributeFamily) {
             $attributeFamilies[] = [
-                'id'         => $attributeFamily->id,
+                'id' => $attributeFamily->id,
                 'admin_name' => $attributeFamily->name,
             ];
         }
 
         return $attributeFamilies;
+    }
+
+    /**
+     * Returns all tax categories.
+     *
+     * @return array
+     */
+    public function getTaxCategories()
+    {
+        $taxCategories = [];
+
+        foreach ($this->taxCategoryRepository->all() as $taxCategory) {
+            $taxCategories[] = [
+                'id' => $taxCategory->id,
+                'admin_name' => $taxCategory->name,
+            ];
+        }
+
+        return $taxCategories;
+    }
+
+    /**
+     * Returns all RMA rules.
+     */
+    public function getRMARules(): array
+    {
+        $rmaRules = [];
+
+        foreach ($this->rmaRuleRepository->all() as $rmaRule) {
+            $rmaRules[] = [
+                'id' => $rmaRule->id,
+                'admin_name' => $rmaRule->name,
+            ];
+        }
+
+        return $rmaRules;
     }
 }

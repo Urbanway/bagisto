@@ -1,41 +1,35 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Checkout\Database\Factories;
 
-use Faker\Generator as Faker;
-use Illuminate\Support\Facades\DB;
-
-use Webkul\Customer\Models\Customer;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Checkout\Models\Cart;
-use Webkul\Checkout\Models\CartAddress;
 
-$factory->define(Cart::class, function (Faker $faker) {
-    $now = date("Y-m-d H:i:s");
+class CartFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = Cart::class;
 
-    $lastOrder = DB::table('orders')
-        ->orderBy('id', 'desc')
-        ->select('id')
-        ->first();
-
-    $customer = factory(Customer::class)->create();
-    $cartAddress = factory(CartAddress::class)->create();
-
-    return [
-        'is_guest'              => 0,
-        'is_active'             => 1,
-        'customer_id'           => $customer->id,
-        'customer_email'        => $customer->email,
-        'customer_first_name'   => $customer->first_name,
-        'customer_last_name'    => $customer->last_name,
-        'is_gift'               => 0,
-        'base_currency_code'    => 'EUR',
-        'channel_currency_code' => 'EUR',
-        'grand_total'           => 0.0000,
-        'base_grand_total'      => 0.0000,
-        'sub_total'             => 0.0000,
-        'base_sub_total'        => 0.0000,
-        'channel_id'            => 1,
-        'created_at'            => $now,
-        'updated_at'            => $now,
-    ];
-});
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'channel_id' => core()->getCurrentChannel()->id,
+            'global_currency_code' => $baseCurrencyCode = core()->getBaseCurrencyCode(),
+            'base_currency_code' => $baseCurrencyCode,
+            'channel_currency_code' => core()->getChannelBaseCurrencyCode(),
+            'cart_currency_code' => core()->getCurrentCurrencyCode(),
+            'items_count' => 1,
+            'is_guest' => 1,
+            'customer_email' => $this->faker->safeEmail(),
+            'customer_first_name' => preg_replace('/[^a-zA-Z ]/', '', $this->faker->firstName()),
+            'customer_last_name' => preg_replace('/[^a-zA-Z ]/', '', $this->faker->lastName()),
+        ];
+    }
+}

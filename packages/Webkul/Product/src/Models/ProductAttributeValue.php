@@ -2,12 +2,18 @@
 
 namespace Webkul\Product\Models;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Webkul\Attribute\Models\AttributeProxy;
 use Webkul\Product\Contracts\ProductAttributeValue as ProductAttributeValueContract;
+use Webkul\Product\Database\Factories\ProductAttributeValueFactory;
 
 class ProductAttributeValue extends Model implements ProductAttributeValueContract
 {
+    use HasFactory;
+
     /**
      * Indicates if the model should be timestamped.
      *
@@ -21,17 +27,26 @@ class ProductAttributeValue extends Model implements ProductAttributeValueContra
      * @var array
      */
     public static $attributeTypeFields = [
-        'text'        => 'text_value',
-        'textarea'    => 'text_value',
-        'price'       => 'float_value',
-        'boolean'     => 'boolean_value',
-        'select'      => 'integer_value',
+        'text' => 'text_value',
+        'textarea' => 'text_value',
+        'price' => 'float_value',
+        'boolean' => 'boolean_value',
+        'select' => 'integer_value',
         'multiselect' => 'text_value',
-        'datetime'    => 'datetime_value',
-        'date'        => 'date_value',
-        'file'        => 'text_value',
-        'image'       => 'text_value',
-        'checkbox'    => 'text_value',
+        'datetime' => 'datetime_value',
+        'date' => 'date_value',
+        'file' => 'text_value',
+        'image' => 'text_value',
+        'checkbox' => 'text_value',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'boolean_value' => 'boolean',
     ];
 
     /**
@@ -44,6 +59,7 @@ class ProductAttributeValue extends Model implements ProductAttributeValueContra
         'attribute_id',
         'locale',
         'channel',
+        'unique_id',
         'text_value',
         'boolean_value',
         'integer_value',
@@ -56,7 +72,7 @@ class ProductAttributeValue extends Model implements ProductAttributeValueContra
     /**
      * Get the attribute that owns the attribute value.
      */
-    public function attribute()
+    public function attribute(): BelongsTo
     {
         return $this->belongsTo(AttributeProxy::modelClass());
     }
@@ -64,8 +80,16 @@ class ProductAttributeValue extends Model implements ProductAttributeValueContra
     /**
      * Get the product that owns the attribute value.
      */
-    public function product()
+    public function product(): BelongsTo
     {
         return $this->belongsTo(ProductProxy::modelClass());
+    }
+
+    /**
+     * Create a new factory instance for the model.
+     */
+    protected static function newFactory(): Factory
+    {
+        return ProductAttributeValueFactory::new();
     }
 }

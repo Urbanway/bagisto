@@ -2,57 +2,58 @@
 
 namespace Webkul\Core\Providers;
 
+use Elastic\Elasticsearch\Client;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Debug\ExceptionHandler;
-use Illuminate\Database\Eloquent\Factory as EloquentFactory;
-use Illuminate\Foundation\AliasLoader;
+use Illuminate\Foundation\Console\DownCommand;
+use Illuminate\Foundation\Console\UpCommand;
+use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\ServiceProvider;
-use Webkul\Core\Core;
+use Webkul\Core\Console\Commands\BagistoVersion;
+use Webkul\Core\Console\Commands\ExchangeRateUpdate;
+use Webkul\Core\Console\Commands\StorageSync;
+use Webkul\Core\Console\Commands\TranslationsChecker;
+use Webkul\Core\Contracts\DatabaseGrammar;
+use Webkul\Core\Enums\SupportedDatabaseEnum;
 use Webkul\Core\Exceptions\Handler;
-use Webkul\Core\Facades\Core as CoreFacade;
-use Webkul\Core\Models\SliderProxy;
-use Webkul\Core\Observers\SliderObserver;
+use Webkul\Core\Facades\ElasticSearch;
+use Webkul\Core\Filesystem\StorageConfigurator;
+use Webkul\Core\Helpers\Database\Grammar\MySqlGrammar;
+use Webkul\Core\Helpers\Database\Grammar\PgSqlGrammar;
 use Webkul\Core\View\Compilers\BladeCompiler;
-use Webkul\Theme\ViewRenderEventManager;
+use Webkul\Core\View\ViewRenderEventManager;
 
 class CoreServiceProvider extends ServiceProvider
 {
     /**
-     * Bootstrap services.
-     *
-     * @return void
-     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     * Register services.
      */
-    public function boot()
+    public function register(): void
     {
-        include __DIR__ . '/../Http/helpers.php';
+        include __DIR__.'/../Http/helpers.php';
 
-        $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
+        $this->registerCommands();
 
-        $this->registerEloquentFactoriesFrom(__DIR__ . '/../Database/Factories');
+        $this->registerOverrides();
 
-        $this->loadTranslationsFrom(__DIR__ . '/../Resources/lang', 'core');
+        $this->registerDatabaseGrammar();
 
-        Validator::extend('slug', 'Webkul\Core\Contracts\Validations\Slug@passes');
+        $this->app->singleton(ViewRenderEventManager::class);
+    }
 
-        Validator::extend('code', 'Webkul\Core\Contracts\Validations\Code@passes');
+    /**
+     * Bootstrap services.
+     */
+    public function boot(): void
+    {
+        $this->configureStorage();
 
-        Validator::extend('decimal', 'Webkul\Core\Contracts\Validations\Decimal@passes');
+        $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
 
-        $this->publishes([
-            dirname(__DIR__) . '/Config/concord.php' => config_path('concord.php'),
-            dirname(__DIR__) . '/Config/scout.php' => config_path('scout.php'),
-        ]);
+        $this->loadTranslationsFrom(__DIR__.'/../Resources/lang', 'core');
 
-        $this->app->bind(
-            ExceptionHandler::class,
-            Handler::class
-        );
-
-        SliderProxy::observe(SliderObserver::class);
-
-        $this->loadViewsFrom(__DIR__ . '/../Resources/views', 'core');
+        $this->loadViewsFrom(__DIR__.'/../Resources/views', 'core');
 
         Event::listen('bagisto.shop.layout.body.after', static function (ViewRenderEventManager $viewRenderEventManager) {
             $viewRenderEventManager->addTemplate('core::blade.tracer.style');
@@ -62,87 +63,114 @@ class CoreServiceProvider extends ServiceProvider
             $viewRenderEventManager->addTemplate('core::blade.tracer.style');
         });
 
-        $this->app->extend('command.down', function () {
-            return new \Webkul\Core\Console\Commands\DownCommand;
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
+            $this->registerExchangeRateSchedule($schedule);
         });
 
-        $this->app->extend('command.up', function () {
-            return new \Webkul\Core\Console\Commands\UpCommand;
-        });
+        $this->app->register(EventServiceProvider::class);
+        $this->app->register(DynamicMailServiceProvider::class);
     }
 
     /**
-     * Register services.
-     *
-     * @return void
+     * Point the application at the disk chosen in Configure -> File Management, before anything
+     * resolves storage, so a store serves from the disk it was told to use.
      */
-    public function register()
+    protected function configureStorage(): void
     {
-        $this->registerFacades();
-
-        $this->registerCommands();
-
-        $this->registerBladeCompiler();
+        app(StorageConfigurator::class)->configure();
     }
 
     /**
-     * Register Bouncer as a singleton.
+     * Register the exchange rate update schedule based on core configuration.
      *
-     * @return void
+     * Skipped when the database is not yet available, as during installation.
      */
-    protected function registerFacades()
+    protected function registerExchangeRateSchedule(Schedule $schedule): void
     {
-        $loader = AliasLoader::getInstance();
-        $loader->alias('core', CoreFacade::class);
+        try {
+            if (! core()->getConfigData('general.exchange_rates.schedule.enabled')) {
+                return;
+            }
 
-        $this->app->singleton('core', function () {
-            return app()->make(Core::class);
-        });
+            $frequency = core()->getConfigData('general.exchange_rates.schedule.frequency') ?: 'daily';
+
+            $time = core()->getConfigData('general.exchange_rates.schedule.time') ?: '00:00';
+
+            $command = $schedule->command('exchange-rate:update');
+
+            match ($frequency) {
+                'weekly' => $command->weeklyOn(1, $time),
+                'monthly' => $command->monthlyOn(1, $time),
+                default => $command->dailyAt($time),
+            };
+        } catch (\Exception) {
+        }
     }
 
     /**
      * Register the console commands of this package.
-     *
-     * @return void
      */
     protected function registerCommands(): void
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
-                \Webkul\Core\Console\Commands\BagistoVersion::class,
-                \Webkul\Core\Console\Commands\Install::class,
-                \Webkul\Core\Console\Commands\ExchangeRateUpdate::class,
-                \Webkul\Core\Console\Commands\BookingCron::class,
+                BagistoVersion::class,
+                ExchangeRateUpdate::class,
+                StorageSync::class,
+                TranslationsChecker::class,
             ]);
         }
-
-        $this->commands([
-            \Webkul\Core\Console\Commands\DownChannelCommand::class,
-            \Webkul\Core\Console\Commands\UpChannelCommand::class,
-        ]);
     }
 
     /**
-     * Register factories.
-     *
-     * @param string $path
-     * @return void
-     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     * Register the overrides.
      */
-    protected function registerEloquentFactoriesFrom($path): void
+    protected function registerOverrides(): void
     {
-        $this->app->make(EloquentFactory::class)->load($path);
+        $this->app->extend(
+            UpCommand::class,
+            fn () => new \Webkul\Core\Console\Commands\UpCommand
+        );
+
+        $this->app->extend(
+            DownCommand::class,
+            fn () => new \Webkul\Core\Console\Commands\DownCommand
+        );
+
+        $this->app->bind(
+            ExceptionHandler::class,
+            Handler::class
+        );
+
+        $this->app->bind(
+            PreventRequestsDuringMaintenance::class,
+            fn ($app) => new \Webkul\Core\Http\Middleware\PreventRequestsDuringMaintenance($app)
+        );
+
+        $this->app->singleton(
+            Client::class,
+            fn () => ElasticSearch::getFacadeApplication()->connection()
+        );
+
+        $this->app->singleton(
+            'blade.compiler',
+            fn ($app) => new BladeCompiler($app['files'], $app['config']['view.compiled'])
+        );
     }
 
     /**
-     * Register the Blade compiler implementation.
-     *
-     * @return void
+     * Register the database grammar abstraction based on the active driver.
      */
-    public function registerBladeCompiler()
+    protected function registerDatabaseGrammar(): void
     {
-        $this->app->singleton('blade.compiler', function ($app) {
-            return new BladeCompiler($app['files'], $app['config']['view.compiled']);
-        });
+        $this->app->singleton(
+            DatabaseGrammar::class,
+            fn ($app) => match ($app['db']->getDriverName()) {
+                SupportedDatabaseEnum::PGSQL->value => new PgSqlGrammar,
+                SupportedDatabaseEnum::MYSQL->value,
+                SupportedDatabaseEnum::MARIADB->value => new MySqlGrammar,
+                default => new MySqlGrammar,
+            }
+        );
     }
 }

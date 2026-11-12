@@ -1,19 +1,26 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Sales\Database\Factories;
 
-use Faker\Generator as Faker;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Sales\Models\OrderPayment;
 
-$factory->define(OrderPayment::class, function (Faker $faker, array $attributes) {
+class OrderPaymentFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = OrderPayment::class;
 
-    if (!array_key_exists('order_id', $attributes)) {
-        throw new InvalidArgumentException('order_id must be provided.');
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'method' => 'cashondelivery',
+        ];
     }
-
-    return [
-        'method' => 'cashondelivery',
-    ];
-});
-
+}

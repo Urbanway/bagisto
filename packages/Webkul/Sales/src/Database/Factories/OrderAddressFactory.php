@@ -1,34 +1,51 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Sales\Database\Factories;
 
-use Faker\Generator as Faker;
-use Webkul\Customer\Models\Customer;
-use Webkul\Customer\Models\CustomerAddress;
-use Webkul\Sales\Models\Order;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Sales\Models\OrderAddress;
 
-$factory->define(OrderAddress::class, function (Faker $faker) {
-    $customer = factory(Customer::class)->create();
-    $customerAddress = factory(CustomerAddress::class)->make();
+class OrderAddressFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = OrderAddress::class;
 
-    return [
-        'first_name'   => $customer->first_name,
-        'last_name'    => $customer->last_name,
-        'email'        => $customer->email,
-        'address1'     => $customerAddress->address1,
-        'country'      => $customerAddress->country,
-        'state'        => $customerAddress->state,
-        'city'         => $customerAddress->city,
-        'postcode'     => $customerAddress->postcode,
-        'phone'        => $customerAddress->phone,
-        'address_type' => OrderAddress::ADDRESS_TYPE_BILLING,
-        'order_id'     => function () {
-            return factory(Order::class)->create()->id;
-        },
+    /**
+     * @var string[]
+     */
+    protected $states = [
+        'shipping',
     ];
-});
 
-$factory->state(OrderAddress::class, 'shipping', [
-    'address_type' => OrderAddress::ADDRESS_TYPE_SHIPPING,
-]);
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'address_type' => OrderAddress::ADDRESS_TYPE_BILLING,
+            'first_name' => $this->faker->firstName(),
+            'last_name' => $this->faker->lastName(),
+            'email' => $this->faker->email(),
+            'address' => $this->faker->streetAddress(),
+            'city' => $this->faker->city(),
+            'state' => $this->faker->state(),
+            'country' => $this->faker->countryCode(),
+            'postcode' => $this->faker->postcode(),
+            'phone' => $this->faker->phoneNumber(),
+        ];
+    }
+
+    public function shipping(): void
+    {
+        $this->state(function () {
+            return [
+                'address_type' => OrderAddress::ADDRESS_TYPE_SHIPPING,
+            ];
+        });
+    }
+}

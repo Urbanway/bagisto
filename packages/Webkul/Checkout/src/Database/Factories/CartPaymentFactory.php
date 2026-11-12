@@ -1,16 +1,27 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Checkout\Database\Factories;
 
-use Faker\Generator as Faker;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Checkout\Models\CartPayment;
 
-$factory->define(CartPayment::class, function (Faker $faker) {
-    $now = date("Y-m-d H:i:s");
+class CartPaymentFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = CartPayment::class;
 
-    return [
-        'created_at' => $now,
-        'updated_at' => $now,
-    ];
-});
-
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+    }
+}

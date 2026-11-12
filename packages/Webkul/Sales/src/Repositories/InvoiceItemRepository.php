@@ -2,7 +2,6 @@
 
 namespace Webkul\Sales\Repositories;
 
-use Illuminate\Container\Container as App;
 use Illuminate\Support\Facades\Event;
 use Webkul\Core\Eloquent\Repository;
 use Webkul\Sales\Contracts\InvoiceItem;
@@ -10,16 +9,16 @@ use Webkul\Sales\Contracts\InvoiceItem;
 class InvoiceItemRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return string
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
         return InvoiceItem::class;
     }
 
     /**
+     * Move the invoiced quantity of an item out of its ordered inventory.
+     *
      * @param  array  $data
      * @return void
      */
@@ -29,9 +28,13 @@ class InvoiceItemRepository extends Repository
             return;
         }
 
+        if (! $data['product']->manage_stock) {
+            return;
+        }
+
         $orderedInventory = $data['product']->ordered_inventories()
-                                            ->where('channel_id', $data['invoice']->order->channel->id)
-                                            ->first();
+            ->where('channel_id', $data['invoice']->order->channel->id)
+            ->first();
 
         if ($orderedInventory) {
             if (($orderedQty = $orderedInventory->qty - $data['qty']) < 0) {
@@ -42,12 +45,12 @@ class InvoiceItemRepository extends Repository
         }
 
         $inventories = $data['product']->inventories()
-                                       ->where('vendor_id', $data['vendor_id'])
-                                       ->whereIn('inventory_source_id', $data['invoice']->order->channel->inventory_sources()->pluck('id'))
-                                       ->orderBy('qty', 'desc')
-                                       ->get();
+            ->where('vendor_id', $data['vendor_id'])
+            ->whereIn('inventory_source_id', $data['invoice']->order->channel->inventory_sources()->pluck('id'))
+            ->orderBy('qty', 'desc')
+            ->get();
 
-        foreach ($inventories as $key => $inventory) {
+        foreach ($inventories as $inventory) {
             if ($inventory->qty >= $data['qty']) {
                 $inventory->update(['qty' => $inventory->qty - $data['qty']]);
 

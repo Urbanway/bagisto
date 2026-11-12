@@ -1,83 +1,28 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Attribute\Database\Factories;
 
-use Faker\Generator as Faker;
-use Webkul\Attribute\Models\Attribute;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Attribute\Models\AttributeOption;
-use Webkul\Core\Models\Locale;
 
-$factory->define(AttributeOption::class, function (Faker $faker, array $attributes) {
+class AttributeOptionFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = AttributeOption::class;
 
-    $locales = Locale::pluck('code')->all();
-
-    // array $attributes does not contain any locale code
-    if (count(array_diff_key(array_flip($locales), $attributes) ) === count($locales)) {
-        $localeCode = $locales[0];
-
-        $attributes[$localeCode] = [
-            'label' => $faker->word,
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'admin_name' => $this->faker->word(),
+            'sort_order' => $this->faker->randomDigit(),
+            'swatch_value' => null,
         ];
     }
-
-    return [
-        'admin_name'   => $faker->word,
-        'sort_order'   => $faker->randomDigit,
-        'attribute_id' => function () {
-            return factory(Attribute::class)->create()->id;
-        },
-        'swatch_value' => null,
-    ];
-});
-
-$factory->define(AttributeOption::class, function (Faker $faker, array $attributes) {
-    return [
-        'admin_name'   => $faker->word,
-        'sort_order'   => $faker->randomDigit,
-        'attribute_id' => function () {
-            return factory(Attribute::class)
-                ->create(['swatch_type' => 'color'])
-                ->id;
-        },
-        'swatch_value' => $faker->hexColor,
-    ];
-});
-
-$factory->define(AttributeOption::class, function (Faker $faker, array $attributes) {
-    return [
-        'admin_name'   => $faker->word,
-        'sort_order'   => $faker->randomDigit,
-        'attribute_id' => function () {
-            return factory(Attribute::class)
-                ->create(['swatch_type' => 'image'])
-                ->id;
-        },
-        'swatch_value' => '/tests/_data/ProductImageExampleForUpload.jpg',
-    ];
-});
-
-$factory->define(AttributeOption::class, function (Faker $faker, array $attributes) {
-    return [
-        'admin_name'   => $faker->word,
-        'sort_order'   => $faker->randomDigit,
-        'attribute_id' => function () {
-            return factory(Attribute::class)
-                ->create(['swatch_type' => 'dropdown'])
-                ->id;
-        },
-        'swatch_value' => null,
-    ];
-});
-
-$factory->define(AttributeOption::class, function (Faker $faker, array $attributes) {
-    return [
-        'admin_name'   => $faker->word,
-        'sort_order'   => $faker->randomDigit,
-        'attribute_id' => function () {
-            return factory(Attribute::class)
-                ->create(['swatch_type' => 'text'])
-                ->id;
-        },
-        'swatch_value' => null,
-    ];
-});
+}

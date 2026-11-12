@@ -2,24 +2,23 @@
 
 namespace Webkul\Sales\Repositories;
 
-use Illuminate\Container\Container as App;
-use Webkul\Core\Eloquent\Repository;
 use Illuminate\Support\Facades\Event;
+use Webkul\Core\Eloquent\Repository;
 use Webkul\Sales\Contracts\ShipmentItem;
 
 class ShipmentItemRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return string
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
         return ShipmentItem::class;
     }
 
     /**
+     * Take the shipped quantity of an item out of its inventory source.
+     *
      * @param  array  $data
      * @return void
      */
@@ -29,9 +28,13 @@ class ShipmentItemRepository extends Repository
             return;
         }
 
+        if (! $data['product']->manage_stock) {
+            return;
+        }
+
         $orderedInventory = $data['product']->ordered_inventories()
-                                            ->where('channel_id', $data['shipment']->order->channel->id)
-                                            ->first();
+            ->where('channel_id', $data['shipment']->order->channel->id)
+            ->first();
 
         if ($orderedInventory) {
             if (($orderedQty = $orderedInventory->qty - $data['qty']) < 0) {
@@ -42,9 +45,9 @@ class ShipmentItemRepository extends Repository
         }
 
         $inventory = $data['product']->inventories()
-                                     ->where('vendor_id', $data['vendor_id'])
-                                     ->where('inventory_source_id', $data['shipment']->inventory_source_id)
-                                     ->first();
+            ->where('vendor_id', $data['vendor_id'])
+            ->where('inventory_source_id', $data['shipment']->inventory_source_id)
+            ->first();
 
         if (! $inventory) {
             return;

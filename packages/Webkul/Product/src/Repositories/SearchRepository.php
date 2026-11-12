@@ -2,59 +2,35 @@
 
 namespace Webkul\Product\Repositories;
 
-use Webkul\Core\Traits\Sanitizer;
-use Webkul\Core\Eloquent\Repository;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Container\Container as App;
-use Webkul\Product\Repositories\ProductRepository;
+use Illuminate\Validation\ValidationException;
+use Webkul\Core\Traits\Sanitizer;
 
-class SearchRepository extends Repository
+class SearchRepository extends ProductRepository
 {
     use Sanitizer;
 
     /**
-     * ProductRepository object
-     *
-     * @return Object
+     * The folder image search uploads are kept in, under a subfolder for the day of each upload, so that every day
+     * before today can be pruned at once.
      */
-    protected $productRepository;
+    public const SEARCH_IMAGES_DIRECTORY = 'search-images';
 
     /**
-     * Create a new repository instance.
+     * Store an image search upload in the folder of the day it was made, returning the url it is served from.
      *
-     * @param \Webkul\Product\Repositories\ProductRepository $productRepository
-     * @param \Illuminate\Container\Container                $app
-     *
-     * @return void
-     */
-    public function __construct(
-        ProductRepository $productRepository,
-        App $app
-    ) {
-        parent::__construct($app);
-
-        $this->productRepository = $productRepository;
-    }
-
-    function model()
-    {
-        return 'Webkul\Product\Contracts\Product';
-    }
-
-    public function search($data)
-    {
-        return $this->productRepository->searchProductByAttribute($data['term'] ?? '');
-    }
-
-    /**
      * @param  array  $data
-     * @return void
+     * @return string
      */
     public function uploadSearchImage($data)
     {
-        $path = request()->file('image')->store('product-search');
+        $path = request()->file('image')->store(self::SEARCH_IMAGES_DIRECTORY.'/'.now()->toDateString());
 
-        $this->sanitizeSVG($path, $data['image']->getMimeType());
+        if (! $this->sanitizeSVG($path, $data['image']->getMimeType())) {
+            throw ValidationException::withMessages([
+                'image' => trans('core::app.errors.invalid-svg'),
+            ]);
+        }
 
         return Storage::url($path);
     }

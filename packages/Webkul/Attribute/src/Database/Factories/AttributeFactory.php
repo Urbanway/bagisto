@@ -1,84 +1,115 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Attribute\Database\Factories;
 
-use Faker\Generator as Faker;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Attribute\Models\Attribute;
-use Webkul\Core\Models\Locale;
 
-$factory->define(Attribute::class, function (Faker $faker, array $attributes) {
-    $types = [
-        'text',
-        'textarea',
-        'price',
-        'boolean',
-        'select',
-        'multiselect',
-        'datetime',
-        'date',
-        'image',
-        'file',
-        'checkbox',
-    ];
+class AttributeFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = Attribute::class;
 
-    $locales = Locale::pluck('code')->all();
-
-    // array $attributes does not contain any locale code
-    if (count(array_diff_key(array_flip($locales), $attributes) ) === count($locales)) {
-        $localeCode = $locales[0];
-
-        $attributes[$localeCode] = [
-            'name' => $faker->word,
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'admin_name' => $this->faker->word(),
+            'code' => $this->faker->unique()->lexify('attr_??????????'),
+            'type' => $this->faker->randomElement([
+                'text',
+                'textarea',
+                'price',
+                'boolean',
+                'select',
+                'multiselect',
+                'datetime',
+                'date',
+                'image',
+                'file',
+                'checkbox',
+            ]),
+            'validation' => '',
+            'position' => $this->faker->randomDigit(),
+            'is_required' => false,
+            'is_unique' => false,
+            'value_per_locale' => false,
+            'value_per_channel' => false,
+            'is_filterable' => false,
+            'is_configurable' => false,
+            'is_user_defined' => true,
+            'is_visible_on_front' => true,
+            'swatch_type' => null,
         ];
     }
 
-    return [
-        'admin_name'          => $faker->word,
-        'code'                => $faker->word,
-        'type'                => array_rand($types),
-        'validation'          => '',
-        'position'            => $faker->randomDigit,
-        'is_required'         => false,
-        'is_unique'           => false,
-        'value_per_locale'    => false,
-        'value_per_channel'   => false,
-        'is_filterable'       => false,
-        'is_configurable'     => false,
-        'is_user_defined'     => true,
-        'is_visible_on_front' => true,
-        'swatch_type'         => null,
-        'use_in_flat'         => true,
-    ];
-});
+    /**
+     * Set the attribute's validation to numeric.
+     */
+    public function validationNumeric(): static
+    {
+        return $this->state(fn () => ['validation' => 'numeric']);
+    }
 
-$factory->state(Attribute::class, 'validation_numeric', [
-    'validation' => 'numeric',
-]);
+    /**
+     * Set the attribute's validation to email.
+     */
+    public function validationEmail(): static
+    {
+        return $this->state(fn () => ['validation' => 'email']);
+    }
 
-$factory->state(Attribute::class, 'validation_email', [
-    'validation' => 'email',
-]);
+    /**
+     * Set the attribute's validation to decimal.
+     */
+    public function validationDecimal(): static
+    {
+        return $this->state(fn () => ['validation' => 'decimal']);
+    }
 
-$factory->state(Attribute::class, 'validation_decimal', [
-    'validation' => 'decimal',
-]);
+    /**
+     * Set the attribute's validation to URL.
+     */
+    public function validationUrl(): static
+    {
+        return $this->state(fn () => ['validation' => 'url']);
+    }
 
-$factory->state(Attribute::class, 'validation_url', [
-    'validation' => 'url',
-]);
+    /**
+     * Mark the attribute as required.
+     */
+    public function required(): static
+    {
+        return $this->state(fn () => ['is_required' => true]);
+    }
 
-$factory->state(Attribute::class, 'required', [
-    'is_required' => true,
-]);
+    /**
+     * Mark the attribute as unique.
+     */
+    public function unique(): static
+    {
+        return $this->state(fn () => ['is_unique' => true]);
+    }
 
-$factory->state(Attribute::class, 'unique', [
-    'is_unique' => true,
-]);
+    /**
+     * Mark the attribute as filterable.
+     */
+    public function filterable(): static
+    {
+        return $this->state(fn () => ['is_filterable' => true]);
+    }
 
-$factory->state(Attribute::class, 'filterable', [
-    'is_filterable' => true,
-]);
-
-$factory->state(Attribute::class, 'configurable', [
-    'is_configurable' => true,
-]);
+    /**
+     * Mark the attribute as configurable.
+     */
+    public function configurable(): static
+    {
+        return $this->state(fn () => ['is_configurable' => true]);
+    }
+}

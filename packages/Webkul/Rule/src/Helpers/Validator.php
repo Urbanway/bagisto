@@ -2,16 +2,20 @@
 
 namespace Webkul\Rule\Helpers;
 
-use Webkul\Checkout\Facades\Cart;
+use Webkul\CartRule\Contracts\CartRule;
+use Webkul\CatalogRule\Contracts\CatalogRule;
+use Webkul\Checkout\Contracts\Cart as CheckoutContract;
+use Webkul\Checkout\Contracts\CartItem;
+use Webkul\Product\Contracts\Product;
 
 class Validator
 {
     /**
-     * Validate cart rule for condition
+     * Whether a rule's conditions hold for a cart, a cart item or a product.
      *
-     * @param  \Webkul\CartRule\Contracts\CartRule|\Webkul\CatalogRule\Contracts\CatalogRule  $rule
-     * @param  \Webkul\Checkout\Contracts\Cart|\Webkul\Checkout\Contracts\CartItem|\Webkul\Product\Contracts\Product  $entity
-     * @return boolean
+     * @param  CartRule|CatalogRule  $rule
+     * @param  CheckoutContract|CartItem|Product  $entity
+     * @return bool
      */
     public function validate($rule, $entity)
     {
@@ -22,38 +26,45 @@ class Validator
         $validConditionCount = $totalConditionCount = 0;
 
         foreach ($rule->conditions as $condition) {
-            if (! $condition['attribute'] || ! isset($condition['value']) || is_null($condition['value']) ||  $condition['value'] == '') {
+            if (
+                ! $condition['attribute']
+                || ! isset($condition['value'])
+                || is_null($condition['value'])
+            ) {
                 continue;
             }
 
-            if ($entity instanceof \Webkul\Checkout\Contracts\Cart && strpos($condition['attribute'], 'cart|') === false) {
+            if (
+                $entity instanceof CheckoutContract
+                && strpos($condition['attribute'], 'cart|') === false
+            ) {
                 continue;
             }
 
             $totalConditionCount++;
 
-            if ($rule->condition_type == 1) {
+            if ($rule->condition_type == '1') {
                 if (! $this->validateObject($condition, $entity)) {
                     return false;
                 } else {
                     $validConditionCount++;
                 }
-            } else {
+            } elseif ($rule->condition_type == '2') {
                 if ($this->validateObject($condition, $entity)) {
                     return true;
                 }
             }
         }
 
-        return $validConditionCount == $totalConditionCount ? true : false;
+        return $validConditionCount == $totalConditionCount;
     }
 
     /**
-     * Return value for the attribute
+     * Get the value a condition compares, for a cart, a cart item or a product.
      *
      * @param  array  $condition
-     * @param  \Webkul\Checkout\Contracts\CartItem|\Webkul\Product\Contracts\Product  $entity
-     * @return boolean
+     * @param  CheckoutContract|CartItem|Product  $entity
+     * @return mixed
      */
     public function getAttributeValue($condition, $entity)
     {
@@ -65,7 +76,7 @@ class Validator
 
         switch (current($chunks)) {
             case 'cart':
-                $cart = $entity instanceof \Webkul\Checkout\Contracts\Cart ? $entity : $entity->cart;
+                $cart = $entity instanceof CheckoutContract ? $entity : $entity->cart;
 
                 if (in_array($attributeCode, ['postcode', 'state', 'country'])) {
                     if (! $cart->shipping_address) {
@@ -95,90 +106,27 @@ class Validator
                 return $entity->{$attributeCode};
 
             case 'product':
+                $product = $entity->product ?? $entity;
+
                 if ($attributeCode == 'category_ids') {
-                    $value = $entity->product
-                             ? $entity->product->categories()->pluck('id')->toArray()
-                             : $entity->categories()->pluck('id')->toArray();
-
-                    return $value;
-                } else {
-                    $value = $entity->product
-                             ? $entity->product->{$attributeCode}
-                              : $entity->{$attributeCode};
-
-                    if (! in_array($condition['attribute_type'], ['multiselect', 'checkbox'])) {
-                        return $value;
-                    }
-
-                    return $value ? explode(',', $value) : [];
+                    return $this->getCategoryIds($product);
                 }
+
+                $value = $this->getProductAttributeValue($product, $attributeCode);
+
+                if (! in_array($condition['attribute_type'], ['multiselect', 'checkbox'])) {
+                    return $value;
+                }
+
+                return $value ? explode(',', $value) : [];
         }
     }
 
     /**
-     * Validate object
+     * Whether an attribute value meets a condition.
      *
      * @param  array  $condition
-     * @param  \Webkul\Checkout\Contracts\CartItem  $entity
-     * @return bool
-     */
-    private function validateObject($condition, $entity)
-    {
-        $validated = false;
-
-        foreach ($this->getAllItems($this->getAttributeScope($condition), $entity) as $item) {
-            $attributeValue = $this->getAttributeValue($condition, $item);
-
-            if ($validated = $this->validateAttribute($condition, $attributeValue)) {
-                break;
-            }
-        }
-
-        return $validated;
-    }
-
-    /**
-     * Return all cart items
-     *
-     * @param  string  $attributeScope
-     * @param  \Webkul\Checkout\Contracts\Cart|\Webkul\Checkout\Contracts\CartItem|\Webkul\Product\Contracts\Product  $item
-     * @return array
-     */
-    private function getAllItems($attributeScope, $item)
-    {
-        if ($attributeScope === 'parent') {
-            return [$item];
-        } elseif ($attributeScope === 'children') {
-            return $item->children ?: [$item];
-        } else {
-            $items = $item->children ?: [];
-
-            $items[] = $item;
-        }
-
-        return $items;
-    }
-
-    /**
-     * Validate object
-     *
-     * @param  array  $condition
-     * @return string
-     */
-    private function getAttributeScope($condition)
-    {
-        $chunks = explode('|', $condition['attribute']);
-
-        $attributeNameChunks = explode('::', $chunks[1]);
-
-        return count($attributeNameChunks) == 2 ? $attributeNameChunks[0] : null;
-    }
-
-    /**
-     * Validate attribute value for condition
-     *
-     * @param  array $condition
-     * @param  mixed $attributeValue
+     * @param  mixed  $attributeValue
      * @return bool
      */
     public function validateAttribute($condition, $attributeValue)
@@ -220,7 +168,10 @@ class Validator
                 break;
 
             case '{}': case '!{}':
-                if (is_scalar($attributeValue) && is_array($condition['value'])) {
+                if (
+                    is_scalar($attributeValue)
+                    && is_array($condition['value'])
+                ) {
                     foreach ($condition['value'] as $item) {
                         if (stripos($attributeValue, $item) !== false) {
                             $result = true;
@@ -253,26 +204,126 @@ class Validator
     }
 
     /**
-     * Validate the condition value against a multi dimensional array recursively
+     * Get the ids of the categories a product is found in: its own and, for a variant, its configurable product's.
      *
-     * @param array  $attributeValue
-     * @param string $conditionValue
+     * @param  Product  $product
+     */
+    protected function getCategoryIds($product): array
+    {
+        $categoryIds = $product->categories()->pluck('id');
+
+        if ($parent = $this->getConfigurableParent($product)) {
+            $categoryIds = $categoryIds->merge($parent->categories()->pluck('id'));
+        }
+
+        return $categoryIds->unique()->values()->all();
+    }
+
+    /**
+     * Get a product's value for an attribute, taken from its configurable product when a variant has none of its own.
      *
+     * @param  Product  $product
+     */
+    protected function getProductAttributeValue($product, string $attributeCode): mixed
+    {
+        $value = $product->{$attributeCode};
+
+        if (! is_null($value)) {
+            return $value;
+        }
+
+        return $this->getConfigurableParent($product)?->{$attributeCode};
+    }
+
+    /**
+     * Get the configurable product a variant belongs to, or null for any other product.
+     *
+     * @param  Product  $product
+     * @return Product|null
+     */
+    protected function getConfigurableParent($product)
+    {
+        return $product->parent_id ? $product->parent : null;
+    }
+
+    /**
+     * Whether any of the items a condition's scope covers meets the condition.
+     *
+     * @param  array  $condition
+     * @param  CheckoutContract|CartItem|Product  $entity
      * @return bool
+     */
+    private function validateObject($condition, $entity)
+    {
+        $validated = false;
+
+        foreach ($this->getAllItems($this->getAttributeScope($condition), $entity) as $item) {
+            $attributeValue = $this->getAttributeValue($condition, $item);
+
+            if ($validated = $this->validateAttribute($condition, $attributeValue)) {
+                break;
+            }
+        }
+
+        return $validated;
+    }
+
+    /**
+     * Get the items a condition's scope covers: the item, its children, or both.
+     *
+     * @param  string|null  $attributeScope
+     * @param  CheckoutContract|CartItem|Product  $item
+     * @return array
+     */
+    private function getAllItems($attributeScope, $item)
+    {
+        if ($attributeScope === 'parent') {
+            return [$item];
+        } elseif ($attributeScope === 'children') {
+            return $item->children ?: [$item];
+        } else {
+            $items = $item->children ?: [];
+
+            $items[] = $item;
+        }
+
+        return $items;
+    }
+
+    /**
+     * Get the scope a condition's attribute names, parent or children, or null for both.
+     *
+     * @param  array  $condition
+     * @return string|null
+     */
+    private function getAttributeScope($condition)
+    {
+        $chunks = explode('|', $condition['attribute']);
+
+        $attributeNameChunks = explode('::', $chunks[1]);
+
+        return count($attributeNameChunks) == 2 ? $attributeNameChunks[0] : null;
+    }
+
+    /**
+     * Whether a condition value is in an array, searching the arrays nested in it too.
      */
     private static function validateArrayValues(array $attributeValue, string $conditionValue): bool
     {
         if (in_array($conditionValue, $attributeValue, true) === true) {
             return true;
         }
-        
+
         foreach ($attributeValue as $subValue) {
-            if (is_array($subValue)) {
-                if (self::validateArrayValues($subValue, $conditionValue) === true) {
-                    return true;
-                }
+            if (! is_array($subValue)) {
+                continue;
+            }
+
+            if (self::validateArrayValues($subValue, $conditionValue) === true) {
+                return true;
             }
         }
+
         return false;
     }
 }

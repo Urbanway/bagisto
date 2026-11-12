@@ -2,73 +2,34 @@
 
 namespace Webkul\Customer\Providers;
 
-use Illuminate\Database\Eloquent\Factory as EloquentFactory;
-use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
-use Webkul\Customer\Captcha;
-use Webkul\Customer\Http\Middleware\RedirectIfNotCustomer;
+use Webkul\Customer\Facades\Captcha;
+use Webkul\Customer\Repositories\CustomerGroupRepository;
 
 class CustomerServiceProvider extends ServiceProvider
 {
     /**
-     * Bootstrap application services.
-     *
-     * @return void
+     * Register application services. The group repository is shared for the request so the
+     * guest group it memoizes is read once however many consumers ask for it.
      */
-    public function boot(Router $router)
+    public function register(): void
     {
-        $router->aliasMiddleware('customer', RedirectIfNotCustomer::class);
+        $this->app->scoped(CustomerGroupRepository::class);
+    }
 
-        $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
+    /**
+     * Bootstrap application services.
+     */
+    public function boot(): void
+    {
+        $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
 
-        $this->loadTranslationsFrom(__DIR__ . '/../Resources/lang', 'customer');
+        $this->loadTranslationsFrom(__DIR__.'/../Resources/lang', 'customer');
 
-        $this->loadViewsFrom(__DIR__ . '/../Resources/views', 'customer');
+        $this->loadViewsFrom(__DIR__.'/../Resources/views', 'customer');
 
         $this->app['validator']->extend('captcha', function ($attribute, $value, $parameters) {
-            return $this->app['captcha']->validateResponse($value);
+            return Captcha::getFacadeRoot()->validateResponse($value);
         });
-    }
-
-    /**
-     * Register services.
-     *
-     * @return void
-     * @throws \Illuminate\Contracts\Container\BindingResolutionException
-     */
-    public function register()
-    {
-        $this->registerConfig();
-
-        $this->registerEloquentFactoriesFrom(__DIR__ . '/../Database/Factories');
-
-        $this->app->singleton('captcha', function ($app) {
-            return new Captcha();
-        });
-    }
-
-    /**
-     * Register factories.
-     *
-     * @param  string  $path
-     * @return void
-     * @throws \Illuminate\Contracts\Container\BindingResolutionException
-     */
-    protected function registerEloquentFactoriesFrom($path): void
-    {
-        $this->app->make(EloquentFactory::class)->load($path);
-    }
-
-    /**
-     * Register package config.
-     *
-     * @return void
-     */
-    protected function registerConfig()
-    {
-        $this->mergeConfigFrom(
-            dirname(__DIR__) . '/Config/system.php',
-            'core'
-        );
     }
 }

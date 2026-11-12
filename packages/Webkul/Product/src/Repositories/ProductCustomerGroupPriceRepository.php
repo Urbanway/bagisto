@@ -4,22 +4,23 @@ namespace Webkul\Product\Repositories;
 
 use Illuminate\Support\Str;
 use Webkul\Core\Eloquent\Repository;
+use Webkul\Product\Contracts\Product;
+use Webkul\Product\Contracts\ProductCustomerGroupPrice;
 
 class ProductCustomerGroupPriceRepository extends Repository
 {
     /**
-     * Specify Model class name.
-     *
-     * @return mixed
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\Product\Contracts\ProductCustomerGroupPrice';
+        return ProductCustomerGroupPrice::class;
     }
 
     /**
-     * @param  array  $data
-     * @param  \Webkul\Product\Contracts\Product  $product
+     * Save the customer group prices of a product, removing the ones left out.
+     *
+     * @param  Product  $product
      * @return void
      */
     public function saveCustomerGroupPrices(array $data, $product)
@@ -30,7 +31,13 @@ class ProductCustomerGroupPriceRepository extends Repository
             foreach ($data['customer_group_prices'] as $customerGroupPriceId => $row) {
                 $row['customer_group_id'] = $row['customer_group_id'] == '' ? null : $row['customer_group_id'];
 
-                if (Str::contains($customerGroupPriceId, 'customer_group_price_')) {
+                $row['unique_id'] = implode('|', array_filter([
+                    $row['qty'],
+                    $product->id,
+                    $row['customer_group_id'],
+                ]));
+
+                if (Str::contains($customerGroupPriceId, 'price_')) {
                     $this->create(array_merge([
                         'product_id' => $product->id,
                     ], $row));
@@ -54,16 +61,13 @@ class ProductCustomerGroupPriceRepository extends Repository
      *
      * @return object
      */
-    public function checkInLoadedCustomerGroupPrice($product, $customerGroupId)
+    public function prices($product, $customerGroupId)
     {
-        static $customerGroupPrices = [];
-
-        if (array_key_exists($product->id, $customerGroupPrices)) {
-            return $customerGroupPrices[$product->id];
-        }
-
-        return $customerGroupPrices[$product->id] = $product->customer_group_prices->filter(function ($customerGroupPrice) use ($customerGroupId) {
-            return $customerGroupPrice->customer_group_id == $customerGroupId || is_null($customerGroupPrice->customer_group_id);
+        $prices = $product->customer_group_prices->filter(function ($customerGroupPrice) use ($customerGroupId) {
+            return $customerGroupPrice->customer_group_id == $customerGroupId
+                || is_null($customerGroupPrice->customer_group_id);
         });
+
+        return $prices;
     }
 }

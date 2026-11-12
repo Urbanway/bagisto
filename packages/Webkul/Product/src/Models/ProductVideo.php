@@ -3,21 +3,42 @@
 namespace Webkul\Product\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
 use Webkul\Product\Contracts\ProductVideo as ProductVideoContract;
 
 class ProductVideo extends Model implements ProductVideoContract
 {
+    /**
+     * Timestamps.
+     *
+     * @param bool
+     */
     public $timestamps = false;
 
+    /**
+     * Fillable.
+     *
+     * @param array
+     */
     protected $fillable = [
+        'type',
         'path',
         'product_id',
-        'type',
+        'position',
     ];
 
     /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = ['url', 'file_name'];
+
+    /**
      * Get the product that owns the image.
+     *
+     * @return BelongsTo
      */
     public function product()
     {
@@ -26,6 +47,8 @@ class ProductVideo extends Model implements ProductVideoContract
 
     /**
      * Get image url for the product image.
+     *
+     * @return string
      */
     public function url()
     {
@@ -34,6 +57,8 @@ class ProductVideo extends Model implements ProductVideoContract
 
     /**
      * Get image url for the product image.
+     *
+     * @return string
      */
     public function getUrlAttribute()
     {
@@ -41,24 +66,23 @@ class ProductVideo extends Model implements ProductVideoContract
     }
 
     /**
-     * @param string $key
+     * Get the file name, without the directory and the extension, for the product video.
      *
+     * @return string
+     */
+    public function getFileNameAttribute()
+    {
+        return pathinfo((string) $this->path, PATHINFO_FILENAME);
+    }
+
+    /**
+     * Is custom attribute.
+     *
+     * @param  string  $attribute
      * @return bool
      */
     public function isCustomAttribute($attribute)
     {
         return $this->attribute_family->custom_attributes->pluck('code')->contains($attribute);
-    }
-
-    /**
-     * @return array
-     */
-    public function toArray()
-    {
-        $array = parent::toArray();
-
-        $array['url'] = $this->url;
-
-        return $array;
     }
 }

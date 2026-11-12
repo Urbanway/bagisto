@@ -2,16 +2,20 @@
 
 namespace Webkul\User\Models;
 
-use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Webkul\User\Models\Role;
-use Webkul\User\Notifications\AdminResetPassword;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\HasApiTokens;
 use Webkul\User\Contracts\Admin as AdminContract;
-
+use Webkul\User\Database\Factories\AdminFactory;
 
 class Admin extends Authenticatable implements AdminContract
 {
-    use Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -22,9 +26,27 @@ class Admin extends Authenticatable implements AdminContract
         'name',
         'email',
         'password',
+        'image',
         'api_token',
         'role_id',
         'status',
+        'two_factor_secret',
+        'two_factor_enabled',
+        'two_factor_backup_codes',
+        'two_factor_verified_at',
+        'two_factor_last_used_window',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'two_factor_backup_codes' => 'array',
+        'two_factor_verified_at' => 'datetime',
+        'two_factor_last_used_window' => 'integer',
+        'two_factor_enabled' => 'boolean',
     ];
 
     /**
@@ -39,7 +61,41 @@ class Admin extends Authenticatable implements AdminContract
     ];
 
     /**
+     * Get image url for the product image.
+     */
+    public function image_url()
+    {
+        if (! $this->image) {
+            return;
+        }
+
+        return Storage::url($this->image);
+    }
+
+    /**
+     * Get image url for the product image.
+     */
+    public function getImageUrlAttribute()
+    {
+        return $this->image_url();
+    }
+
+    /**
+     * @return array
+     */
+    public function toArray()
+    {
+        $array = parent::toArray();
+
+        $array['image_url'] = $this->image_url;
+
+        return $array;
+    }
+
+    /**
      * Get the role that owns the admin.
+     *
+     * @return BelongsTo
      */
     public function role()
     {
@@ -47,28 +103,39 @@ class Admin extends Authenticatable implements AdminContract
     }
 
     /**
-    * Send the password reset notification.
-    *
-    * @param  string  $token
-    * @return void
-    */
-    public function sendPasswordResetNotification($token)
-    {
-        $this->notify(new AdminResetPassword($token));
-    }
-
-    /**
      * Checks if admin has permission to perform certain action.
      *
-     * @param  String  $permission
-     * @return Boolean
+     * @param  string  $permission
+     * @return bool
      */
     public function hasPermission($permission)
     {
-        if ($this->role->permission_type == 'custom' && ! $this->role->permissions) {
+        if (
+            $this->role->permission_type == 'custom'
+            && ! $this->role->permissions
+        ) {
             return false;
         }
 
         return in_array($permission, $this->role->permissions);
+    }
+
+    /**
+     * Send the password reset notification.
+     *
+     * @param  string  $token
+     * @return void
+     */
+    public function sendPasswordResetNotification($token)
+    {
+        Event::dispatch('admin.password.send_reset_link', [$this, $token]);
+    }
+
+    /**
+     * Create a new factory instance for the model.
+     */
+    protected static function newFactory(): Factory
+    {
+        return AdminFactory::new();
     }
 }

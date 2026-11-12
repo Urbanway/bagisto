@@ -1,18 +1,36 @@
 <?php
 
-use Faker\Generator as Faker;
+namespace Webkul\Category\Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Category\Models\Category;
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
-$factory->define(Category::class, function (Faker $faker, array $attributes) {
+class CategoryFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = Category::class;
 
-    return [
-        'status'    => 1,
-        'position'  => $faker->randomDigit,
-        'parent_id' => 1,
-    ];
-});
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'status' => 1,
+            'position' => $this->faker->randomDigit(),
+            'parent_id' => 1,
+        ];
+    }
 
-$factory->state(Category::class, 'inactive', [
-    'status' => 0,
-]);
+    /**
+     * Mark the category as inactive.
+     */
+    public function inactive(): static
+    {
+        return $this->state(fn () => ['status' => 0]);
+    }
+}

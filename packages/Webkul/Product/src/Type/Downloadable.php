@@ -3,145 +3,113 @@
 namespace Webkul\Product\Type;
 
 use Webkul\Attribute\Repositories\AttributeRepository;
-use Webkul\Checkout\Models\CartItem;
-use Webkul\Product\Datatypes\CartItemValidationResult;
+use Webkul\Checkout\Contracts\CartItem;
+use Webkul\Customer\Repositories\CustomerRepository;
+use Webkul\Product\Contracts\Product;
+use Webkul\Product\DataTypes\CartItemValidationResult;
+use Webkul\Product\Helpers\Indexers\Price\Downloadable as DownloadableIndexer;
 use Webkul\Product\Repositories\ProductAttributeValueRepository;
+use Webkul\Product\Repositories\ProductCustomerGroupPriceRepository;
 use Webkul\Product\Repositories\ProductDownloadableLinkRepository;
 use Webkul\Product\Repositories\ProductDownloadableSampleRepository;
 use Webkul\Product\Repositories\ProductImageRepository;
 use Webkul\Product\Repositories\ProductInventoryRepository;
 use Webkul\Product\Repositories\ProductRepository;
 use Webkul\Product\Repositories\ProductVideoRepository;
+use Webkul\Tax\Facades\Tax;
 
 class Downloadable extends AbstractType
 {
     /**
-     * ProductDownloadableLinkRepository instance
-     *
-     * @var \Webkul\Product\Repositories\ProductDownloadableLinkRepository
-     */
-    protected $productDownloadableLinkRepository;
-
-    /**
-     * ProductDownloadableSampleRepository instance
-     *
-     * @var \Webkul\Product\Repositories\ProductDownloadableSampleRepository
-     */
-    protected $productDownloadableSampleRepository;
-
-    /**
-     * Skip attribute for downloadable product type
+     * Skip attribute for downloadable product type.
      *
      * @var array
      */
-    protected $skipAttributes = ['length', 'width', 'height', 'weight', 'guest_checkout'];
-
-    /**
-     * These blade files will be included in product edit page
-     *
-     * @var array
-     */
-    protected $additionalViews = [
-        'admin::catalog.products.accordians.images',
-        'admin::catalog.products.accordians.categories',
-        'admin::catalog.products.accordians.downloadable',
-        'admin::catalog.products.accordians.channels',
-        'admin::catalog.products.accordians.product-links',
-        'admin::catalog.products.accordians.videos',
+    protected $skipAttributes = [
+        'length',
+        'width',
+        'height',
+        'weight',
+        'depth',
+        'manage_stock',
+        'guest_checkout',
+        'allow_rma',
+        'rma_rule_id',
     ];
 
     /**
-     * Is a stokable product type
+     * Is a stockable product type.
      *
      * @var bool
      */
     protected $isStockable = false;
 
     /**
-     * Show quantity box
+     * Product can be added to cart with options or not.
      *
      * @var bool
      */
-    protected $allowMultipleQty = false;
-
-    /**
-     * getProductOptions
-     */
-    protected $getProductOptions = [];
+    protected $canBeAddedToCartWithoutOptions = false;
 
     /**
      * Create a new product type instance.
      *
-     * @param \Webkul\Attribute\Repositories\AttributeRepository               $attributeRepository
-     * @param \Webkul\Product\Repositories\ProductRepository                   $productRepository
-     * @param \Webkul\Product\Repositories\ProductAttributeValueRepository     $attributeValueRepository
-     * @param \Webkul\Product\Repositories\ProductInventoryRepository          $productInventoryRepository
-     * @param \Webkul\Product\Repositories\ProductImageRepository              $productImageRepository
-     * @param \Webkul\Product\Repositories\ProductDownloadableLinkRepository   $productDownloadableLinkRepository
-     * @param \Webkul\Product\Repositories\ProductDownloadableSampleRepository $productDownloadableSampleRepository
-     * @param \Webkul\Product\Repositories\ProductVideoRepository              $productVideoRepository
-     *
      * @return void
      */
     public function __construct(
+        CustomerRepository $customerRepository,
         AttributeRepository $attributeRepository,
         ProductRepository $productRepository,
         ProductAttributeValueRepository $attributeValueRepository,
         ProductInventoryRepository $productInventoryRepository,
-        productImageRepository $productImageRepository,
-        ProductDownloadableLinkRepository $productDownloadableLinkRepository,
-        ProductDownloadableSampleRepository $productDownloadableSampleRepository,
-        ProductVideoRepository $productVideoRepository
-    )
-    {
+        ProductImageRepository $productImageRepository,
+        ProductVideoRepository $productVideoRepository,
+        ProductCustomerGroupPriceRepository $productCustomerGroupPriceRepository,
+        protected ProductDownloadableLinkRepository $productDownloadableLinkRepository,
+        protected ProductDownloadableSampleRepository $productDownloadableSampleRepository
+    ) {
         parent::__construct(
+            $customerRepository,
             $attributeRepository,
             $productRepository,
             $attributeValueRepository,
             $productInventoryRepository,
             $productImageRepository,
-            $productVideoRepository
+            $productVideoRepository,
+            $productCustomerGroupPriceRepository
         );
-
-        $this->productDownloadableLinkRepository = $productDownloadableLinkRepository;
-
-        $this->productDownloadableSampleRepository = $productDownloadableSampleRepository;
     }
 
     /**
-     * @param array  $data
-     * @param int    $id
-     * @param string $attribute
+     * Update.
      *
-     * @return \Webkul\Product\Contracts\Product
+     * @param  int  $id
+     * @param  array  $attributes
+     * @return Product
      */
-    public function update(array $data, $id, $attribute = "id")
+    public function update(array $data, $id, $attributes = [])
     {
-        $product = parent::update($data, $id, $attribute);
-        $route = request()->route() ? request()->route()->getName() : '';
+        $product = parent::update($data, $id, $attributes);
 
-        if ($route != 'admin.catalog.products.massupdate') {
-            $this->productDownloadableLinkRepository->saveLinks($data, $product);
-
-            $this->productDownloadableSampleRepository->saveSamples($data, $product);
+        if (! empty($attributes)) {
+            return $product;
         }
+
+        $this->productDownloadableLinkRepository->saveLinks($data, $product);
+
+        $this->productDownloadableSampleRepository->saveSamples($data, $product);
 
         return $product;
     }
 
     /**
-     * Return true if this product type is saleable
+     * Return true if this product type is saleable.
      *
      * @return bool
      */
     public function isSaleable()
     {
         if (! $this->product->status) {
-            return false;
-        }
-
-        if (is_callable(config('products.isSaleable')) &&
-            call_user_func(config('products.isSaleable'), $this->product) === false) {
             return false;
         }
 
@@ -153,19 +121,18 @@ class Downloadable extends AbstractType
     }
 
     /**
-     * Returns validation rules
+     * Returns validation rules.
      *
      * @return array
      */
     public function getTypeValidationRules()
     {
         return [
-            // 'downloadable_links.*.title' => 'required',
-            'downloadable_links.*.type'       => 'required',
-            'downloadable_links.*.file'       => 'required_if:type,==,file',
-            'downloadable_links.*.file_name'  => 'required_if:type,==,file',
-            'downloadable_links.*.url'        => 'required_if:type,==,url',
-            'downloadable_links.*.downloads'  => 'required',
+            'downloadable_links.*.type' => 'required',
+            'downloadable_links.*.file' => 'required_if:type,==,file',
+            'downloadable_links.*.file_name' => 'required_if:type,==,file',
+            'downloadable_links.*.url' => 'required_if:type,==,url',
+            'downloadable_links.*.downloads' => 'required',
             'downloadable_links.*.sort_order' => 'required',
         ];
     }
@@ -173,14 +140,19 @@ class Downloadable extends AbstractType
     /**
      * Add product. Returns error message if can't prepare product.
      *
-     * @param array $data
-     *
+     * @param  array  $data
      * @return array
      */
     public function prepareForCart($data)
     {
-        if (! isset($data['links']) || ! count($data['links'])) {
-            return trans('shop::app.checkout.cart.integrity.missing_links');
+        $data['links'] = $this->product->downloadable_links
+            ->pluck('id')
+            ->intersect((array) ($data['links'] ?? []))
+            ->values()
+            ->all();
+
+        if (empty($data['links'])) {
+            return trans('product::app.checkout.cart.missing-links');
         }
 
         $products = parent::prepareForCart($data);
@@ -190,9 +162,12 @@ class Downloadable extends AbstractType
                 continue;
             }
 
-            $products[0]['price'] += core()->convertPrice($link->price);
+            $products[0]['price'] += ($price = core()->convertPrice($link->price));
+            $products[0]['price_incl_tax'] += $price;
             $products[0]['base_price'] += $link->price;
-            $products[0]['total'] += (core()->convertPrice($link->price) * $products[0]['quantity']);
+            $products[0]['base_price_incl_tax'] += $link->price;
+            $products[0]['total'] += ($total = core()->convertPrice($link->price) * $products[0]['quantity']);
+            $products[0]['total_incl_tax'] += $total;
             $products[0]['base_total'] += ($link->price * $products[0]['quantity']);
         }
 
@@ -200,10 +175,24 @@ class Downloadable extends AbstractType
     }
 
     /**
+     * The quantity to put in the cart, which is always one. A link is bought once, so adding it
+     * again must neither raise the quantity nor add to what the cart already holds.
      *
-     * @param array $options1
-     * @param array $options2
+     * @param  array  $data
+     * @return array
+     */
+    public function getQtyRequest($data)
+    {
+        $data['quantity'] = 1;
+
+        return $data;
+    }
+
+    /**
+     * Compare options.
      *
+     * @param  array  $options1
+     * @param  array  $options2
      * @return bool
      */
     public function compareOptions($options1, $options2)
@@ -212,20 +201,26 @@ class Downloadable extends AbstractType
             return false;
         }
 
-        if (isset($options1['links']) && isset($options2['links'])) {
+        if (
+            isset($options1['links'])
+            && isset($options2['links'])
+        ) {
             return $options1['links'] === $options2['links'];
-        } elseif (! isset($options1['links'])) {
+        }
+
+        if (! isset($options1['links'])) {
             return false;
-        } elseif (! isset($options2['links'])) {
+        }
+
+        if (! isset($options2['links'])) {
             return false;
         }
     }
 
     /**
-     * Returns additional information for items
+     * Returns additional information for items.
      *
-     * @param array $data
-     *
+     * @param  array  $data
      * @return array
      */
     public function getAdditionalOptions($data)
@@ -240,64 +235,107 @@ class Downloadable extends AbstractType
 
         $data['attributes'][0] = [
             'attribute_name' => 'Downloads',
-            'option_id'      => 0,
-            'option_label'   => implode(', ', $labels),
+            'option_id' => 0,
+            'option_label' => implode(', ', $labels),
         ];
 
         return $data;
     }
 
     /**
-     * Validate cart item product price
-     *
-     * @param \Webkul\Checkout\Models\CartItem $item
-     *
-     * @return \Webkul\Product\Datatypes\CartItemValidationResult
+     * Validate cart item product price.
      */
     public function validateCartItem(CartItem $item): CartItemValidationResult
     {
-        $result = new CartItemValidationResult();
+        $validation = new CartItemValidationResult;
 
         if (parent::isCartItemInactive($item)) {
-            $result->itemIsInactive();
+            $validation->itemIsInactive();
 
-            return $result;
+            return $validation;
         }
 
-        $price = $item->product->getTypeInstance()->getFinalPrice($item->quantity);
+        $basePrice = $this->getFinalPrice($item->quantity);
 
         foreach ($item->product->downloadable_links as $link) {
             if (! in_array($link->id, $item->additional['links'])) {
                 continue;
             }
 
-            $price += $link->price;
+            $basePrice += $link->price;
         }
 
-        $price = round($price, 2);
+        $basePrice = round($basePrice, 2);
 
-        if ($price == $item->base_price) {
-            return $result;
+        if (Tax::isInclusiveTaxProductPrices()) {
+            $itemBasePrice = $item->base_price_incl_tax;
+        } else {
+            $itemBasePrice = $item->base_price;
         }
 
-        $item->base_price = $price;
-        $item->price = core()->convertPrice($price);
+        if ($basePrice == $itemBasePrice) {
+            return $validation;
+        }
 
-        $item->base_total = $price * $item->quantity;
-        $item->total = core()->convertPrice($price * $item->quantity);
+        $item->base_price = $basePrice;
+        $item->base_price_incl_tax = $basePrice;
+
+        $item->price = ($price = core()->convertPrice($basePrice));
+        $item->price_incl_tax = $price;
+
+        $item->base_total = $basePrice * $item->quantity;
+        $item->base_total_incl_tax = $basePrice * $item->quantity;
+
+        $item->total = ($total = core()->convertPrice($basePrice * $item->quantity));
+        $item->total_incl_tax = $total;
 
         $item->save();
 
-        return $result;
+        return $validation;
     }
 
     /**
-     * Get product maximam price
+     * Get product maximum price.
      *
      * @return float
      */
-    public function getMaximamPrice()
+    public function getMaximumPrice()
     {
         return $this->product->price;
+    }
+
+    /**
+     * Returns price indexer class for a specific product type.
+     *
+     * @return string
+     */
+    public function getPriceIndexer()
+    {
+        return app(DownloadableIndexer::class);
+    }
+
+    /**
+     * Copy relationships.
+     *
+     * @param  \Webkul\Product\Models\Product  $product
+     * @return void
+     */
+    protected function copyRelationships($product)
+    {
+        parent::copyRelationships($product);
+
+        $attributesToSkip = config('products.copy.skip_attributes') ?? [];
+
+        if (! in_array('downloadable_links', $attributesToSkip)) {
+            foreach ($this->product->downloadable_links as $downloadableLink) {
+                $product->downloadable_links()->save($downloadableLink->replicateWithTranslations());
+            }
+        }
+
+        if (! in_array('downloadable_samples', $attributesToSkip)) {
+            foreach ($this->product->downloadable_samples as $downloadableSample) {
+                $product->downloadable_samples()->save($downloadableSample->replicateWithTranslations());
+            }
+        }
     }
 }

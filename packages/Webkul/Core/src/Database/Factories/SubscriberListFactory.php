@@ -1,14 +1,29 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Core\Database\Factories;
 
-use Faker\Generator as Faker;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Core\Models\SubscribersList;
 
-$factory->define(SubscribersList::class, function (Faker $faker) {
-    return [
-        'email'         => $faker->safeEmail,
-        'is_subscribed' => $faker->boolean,
-        'channel_id'    => 1,
-    ];
-});
+class SubscriberListFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = SubscribersList::class;
+
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'email' => $this->faker->safeEmail(),
+            'channel_id' => core()->getCurrentChannel()->id,
+            'is_subscribed' => 1,
+            'token' => uniqid(),
+        ];
+    }
+}

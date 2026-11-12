@@ -2,7 +2,6 @@
 
 namespace Webkul\Sales\Models;
 
-use Webkul\Checkout\Models\CartProxy;
 use Illuminate\Database\Eloquent\Model;
 use Webkul\Sales\Contracts\OrderComment as OrderCommentContract;
 
@@ -12,6 +11,15 @@ class OrderComment extends Model implements OrderCommentContract
         'comment',
         'customer_notified',
         'order_id',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'customer_notified' => 'boolean',
     ];
 
     /**

@@ -3,59 +3,34 @@
 namespace Webkul\Customer\Repositories;
 
 use Webkul\Core\Eloquent\Repository;
+use Webkul\Customer\Contracts\CustomerGroup;
 
 class CustomerGroupRepository extends Repository
 {
     /**
-     * Specify Model class name
+     * The guest group, once it has been read.
      *
-     * @return mixed
+     * @var CustomerGroup|null
      */
+    protected $guestGroup;
 
-    function model()
+    /**
+     * Specify the model class name.
+     */
+    public function model(): string
     {
-        return 'Webkul\Customer\Contracts\CustomerGroup';
+        return CustomerGroup::class;
     }
 
     /**
-     * @param  array  $data
-     * @return \Webkul\Customer\Contracts\CustomerGroup
+     * Get the group every shopper who is not logged in belongs to.
      */
-    public function create(array $data)
+    public function getGuestGroup(): ?CustomerGroup
     {
-        $customer = $this->model->create($data);
-
-        return $customer;
-    }
-
-    /**
-     * @param  array  $data
-     * @param  int  $id
-     * @param  string  $id
-     * @return \Webkul\Customer\Contracts\CustomerGroup
-     */
-    public function update(array $data, $id, $attribute = "id")
-    {
-        $customer = $this->find($id);
-
-        $customer->update($data);
-
-        return $customer;
-    }
-
-    /**
-     * Returns guest group.
-     *
-     * @return object
-     */
-    public function getCustomerGuestGroup()
-    {
-        static $customerGuestGroup;
-
-        if ($customerGuestGroup) {
-            return $customerGuestGroup;
+        if ($this->guestGroup) {
+            return $this->guestGroup;
         }
 
-        return $customerGuestGroup = $this->findOneByField('code', 'guest');
+        return $this->guestGroup = $this->findOneByField('code', 'guest');
     }
 }

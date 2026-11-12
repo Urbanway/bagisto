@@ -2,15 +2,27 @@
 
 namespace Webkul\BookingProduct\Models;
 
-use Webkul\Core\Eloquent\TranslatableModel;
 use Webkul\BookingProduct\Contracts\BookingProductEventTicket as BookingProductEventTicketContract;
+use Webkul\Core\Eloquent\TranslatableModel;
 
 class BookingProductEventTicket extends TranslatableModel implements BookingProductEventTicketContract
 {
+    /**
+     * Indicates if the model should be timestamped.
+     */
     public $timestamps = false;
 
-    public $translatedAttributes = ['name', 'description'];
+    /**
+     * Summary of translatedAttributes
+     */
+    public $translatedAttributes = [
+        'name',
+        'description',
+    ];
 
+    /**
+     * The attributes that are mass assignable.
+     */
     protected $fillable = [
         'price',
         'qty',

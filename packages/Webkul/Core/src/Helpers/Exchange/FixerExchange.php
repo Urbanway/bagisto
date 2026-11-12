@@ -2,96 +2,63 @@
 
 namespace Webkul\Core\Helpers\Exchange;
 
-use Webkul\Core\Helpers\Exchange\ExchangeRate;
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Webkul\Core\Repositories\CurrencyRepository;
 use Webkul\Core\Repositories\ExchangeRateRepository;
 
 class FixerExchange extends ExchangeRate
 {
     /**
-     * API key
-     * 
-     * @var string 
+     * API endpoint.
      */
-    protected $apiKey;
+    protected string $apiEndPoint = 'http://data.fixer.io/api';
 
     /**
-     * API endpoint
-     * 
-     * @var string 
+     * API key.
      */
-    protected $apiEndPoint;
+    protected ?string $apiKey;
 
     /**
-     * Holds CurrencyRepository instance
-     * 
-     * @var \Webkul\Core\Repositories\CurrencyRepository
+     * Create a new instance.
      */
-    protected $currencyRepository;
+    public function __construct(
+        protected CurrencyRepository $currencyRepository,
+        protected ExchangeRateRepository $exchangeRateRepository
+    ) {
+        parent::__construct($currencyRepository, $exchangeRateRepository);
 
-    /**
-     * Holds ExchangeRateRepository instance
-     * 
-     * @var \Webkul\Core\Repositories\ExchangeRateRepository
-     */
-    protected $exchangeRateRepository;
-
-    /**
-     * Create a new helper instance.
-     *
-     * @param  \Webkul\Core\Repositories\CurrencyRepository  $currencyRepository
-     * @param  \Webkul\Core\Repositories\ExchangeRateRepository  $exchangeRateRepository
-     * @return void
-     */
-    public function  __construct(
-        CurrencyRepository $currencyRepository,
-        ExchangeRateRepository $exchangeRateRepository
-    )
-    {
-        $this->currencyRepository = $currencyRepository;
-
-        $this->exchangeRateRepository = $exchangeRateRepository;
-
-        $this->apiEndPoint = 'http://data.fixer.io/api';
-
-        $this->apiKey = config('services.exchange-api')['fixer']['key'];
+        $this->apiKey = $this->getApiKey(
+            'general.exchange_rates.fixer.api_key',
+            'services.exchange_api.fixer.key'
+        );
     }
 
     /**
-     * Fetch rates and updates in currency_exchange_rates table
-     * 
-     * @return \Exception|void
+     * Fetch rates and update the `currency_exchange_rates` table.
      */
-    public function updateRates()
+    public function updateRates(): void
     {
-        $client = new \GuzzleHttp\Client();
+        $baseCurrency = config('app.currency');
 
         foreach ($this->currencyRepository->all() as $currency) {
-            if ($currency->code == config('app.currency')) {
+            if ($currency->code === $baseCurrency) {
                 continue;
             }
 
-            $result = $client->request('GET', $this->apiEndPoint . '/' . date('Y-m-d') . '?access_key=' . $this->apiKey .'&base=' . config('app.currency') . '&symbols=' . $currency->code);
+            $response = Http::get("{$this->apiEndPoint}/".date('Y-m-d'), [
+                'access_key' => $this->apiKey,
+                'base' => $baseCurrency,
+                'symbols' => $currency->code,
+            ]);
 
-            $result = json_decode($result->getBody()->getContents(), true);
+            $result = $response->json();
 
             if (isset($result['success']) && ! $result['success']) {
-                throw new \Exception(
-                    isset($result['error']['info'])
-                    ? $result['error']['info']
-                    : $result['error']['type'], 1);
+                throw new RuntimeException($result['error']['info'] ?? $result['error']['type']);
             }
 
-            if ($exchangeRate = $currency->exchange_rate) {
-                $this->exchangeRateRepository->update([
-                    'rate' => $result['rates'][$currency->code],
-                ], $exchangeRate->id);
-            } else {
-                $this->exchangeRateRepository->create([
-                    'rate'            => $result['rates'][$currency->code],
-                    'target_currency' => $currency->id,
-                ]);
-            }
+            $this->updateOrCreateRate($currency, $result['rates'][$currency->code]);
         }
     }
 }

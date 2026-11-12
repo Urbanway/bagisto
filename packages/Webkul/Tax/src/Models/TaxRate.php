@@ -2,18 +2,22 @@
 
 namespace Webkul\Tax\Models;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Webkul\Tax\Models\TaxCategory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Webkul\Tax\Contracts\TaxRate as TaxRateContract;
+use Webkul\Tax\Database\Factories\TaxRateFactory;
 
 class TaxRate extends Model implements TaxRateContract
 {
+    use HasFactory;
+
     /**
      * The attributes that are mass assignable.
      *
      * @var array
      */
-
     protected $table = 'tax_rates';
 
     protected $fillable = [
@@ -27,8 +31,25 @@ class TaxRate extends Model implements TaxRateContract
         'tax_rate',
     ];
 
-    public function tax_categories()
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'is_zip' => 'boolean',
+    ];
+
+    public function tax_categories(): BelongsToMany
     {
         return $this->belongsToMany(TaxCategoryProxy::modelClass(), 'tax_categories_tax_rates', 'tax_rate_id', 'id');
+    }
+
+    /**
+     * Create a new factory instance for the model.
+     */
+    protected static function newFactory(): Factory
+    {
+        return TaxRateFactory::new();
     }
 }

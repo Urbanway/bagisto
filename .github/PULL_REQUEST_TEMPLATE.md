@@ -10,3 +10,10 @@
 ## Documentation
 - [ ] My pull request requires an update on the documentation repository.
 <!--- Please describe in detail what needs to be changed. --->
+
+## Branch Selection
+<!--- Please specify the target branch for this pull request. -->
+- [ ] Target Branch: the release line the change affects (`2.4`, `2.5`) for bug fixes and minor changes, `master` for major features and breaking changes
+
+## Tailwind Reordering
+<!--- Please make sure all the Tailwind classes are reordered. -->

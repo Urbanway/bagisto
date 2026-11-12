@@ -8,11 +8,9 @@ use Webkul\Sales\Contracts\OrderComment;
 class OrderCommentRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return string
+     * Specify the model class name.
      */
-    public function model()
+    public function model(): string
     {
         return OrderComment::class;
     }

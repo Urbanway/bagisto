@@ -2,22 +2,71 @@
 
 namespace Webkul\Customer\Models;
 
-use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\hasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Tymon\JWTAuth\Contracts\JWTSubject;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
+use Laravel\Sanctum\HasApiTokens;
 use Webkul\Checkout\Models\CartProxy;
-use Webkul\Sales\Models\OrderProxy;
+use Webkul\Core\Models\ChannelProxy;
 use Webkul\Core\Models\SubscribersListProxy;
-use Webkul\Product\Models\ProductReviewProxy;
-use Webkul\Customer\Notifications\CustomerResetPassword;
 use Webkul\Customer\Contracts\Customer as CustomerContract;
+use Webkul\Customer\Database\Factories\CustomerFactory;
+use Webkul\Product\Models\ProductReviewProxy;
+use Webkul\Sales\Models\InvoiceProxy;
+use Webkul\Sales\Models\OrderProxy;
 
-class Customer extends Authenticatable implements CustomerContract, JWTSubject
+class Customer extends Authenticatable implements CustomerContract
 {
-    use Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
     protected $table = 'customers';
 
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'subscribed_to_news_letter' => 'boolean',
+        'status' => 'boolean',
+        'is_verified' => 'boolean',
+        'is_suspended' => 'boolean',
+        'date_of_birth' => 'date:Y-m-d',
+    ];
+
+    /**
+     * Set date of birth with empty string to null conversion.
+     */
+    public function setDateOfBirthAttribute($value): void
+    {
+        $this->attributes['date_of_birth'] = $value !== '' && $value !== null ? $value : null;
+    }
+
+    /**
+     * Set phone with empty string to null conversion.
+     */
+    public function setPhoneAttribute($value): void
+    {
+        $this->attributes['phone'] = $value !== '' && $value !== null ? $value : null;
+    }
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array
+     */
     protected $fillable = [
         'first_name',
         'last_name',
@@ -27,40 +76,95 @@ class Customer extends Authenticatable implements CustomerContract, JWTSubject
         'phone',
         'password',
         'api_token',
-        'customer_group_id',
-        'subscribed_to_news_letter',
-        'is_verified',
         'token',
-        'notes',
+        'customer_group_id',
+        'channel_id',
+        'subscribed_to_news_letter',
         'status',
+        'is_verified',
+        'is_suspended',
     ];
 
-    protected $hidden = ['password', 'api_token', 'remember_token'];
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array
+     */
+    protected $hidden = [
+        'password',
+        'api_token',
+        'remember_token',
+    ];
+
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = ['image_url'];
+
+    /**
+     * Send the password reset notification.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        Event::dispatch('customer.password.send_reset_link', [$this, $token]);
+    }
+
+    /**
+     * Get image url for the customer profile.
+     *
+     * @return string|null
+     */
+    public function getImageUrlAttribute()
+    {
+        return $this->image_url();
+    }
 
     /**
      * Get the customer full name.
      */
-    public function getNameAttribute()
+    public function getNameAttribute(): string
     {
-        return ucfirst($this->first_name) . ' ' . ucfirst($this->last_name);
+        return ucfirst($this->first_name).' '.ucfirst($this->last_name);
     }
 
     /**
-     * Email exists or not
+     * Get image url for the customer image.
+     *
+     * @return string|null
      */
-    public function emailExists($email)
+    public function image_url()
     {
-        $results =  $this->where('email', $email);
-
-        if ($results->count() == 0) {
-            return false;
-        } else {
-            return true;
+        if (! $this->image) {
+            return;
         }
+
+        return Storage::url($this->image);
+    }
+
+    /**
+     * Is email exists or not.
+     *
+     * @param  string  $email
+     */
+    public function emailExists($email): bool
+    {
+        $results = $this->where('email', $email);
+
+        if ($results->count() === 0) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
      * Get the customer group that owns the customer.
+     *
+     * @return BelongsTo
      */
     public function group()
     {
@@ -68,18 +172,9 @@ class Customer extends Authenticatable implements CustomerContract, JWTSubject
     }
 
     /**
-    * Send the password reset notification.
-    *
-    * @param  string  $token
-    * @return void
-    */
-    public function sendPasswordResetNotification($token)
-    {
-        $this->notify(new CustomerResetPassword($token));
-    }
-
-    /**
      * Get the customer address that owns the customer.
+     *
+     * @return HasMany
      */
     public function addresses()
     {
@@ -88,14 +183,29 @@ class Customer extends Authenticatable implements CustomerContract, JWTSubject
 
     /**
      * Get default customer address that owns the customer.
+     *
+     * @return HasOne
      */
     public function default_address()
     {
-        return $this->hasOne(CustomerAddressProxy::modelClass(), 'customer_id')->where('default_address', 1);
+        return $this->hasOne(CustomerAddressProxy::modelClass(), 'customer_id')
+            ->where('default_address', 1);
     }
 
     /**
-     * Customer's relation with wishlist items
+     * Customer's relation with invoice .
+     *
+     * @return hasManyThrough
+     */
+    public function invoices()
+    {
+        return $this->hasManyThrough(InvoiceProxy::modelClass(), OrderProxy::modelClass());
+    }
+
+    /**
+     * Customer's relation with wishlist items.
+     *
+     * @return HasMany
      */
     public function wishlist_items()
     {
@@ -103,7 +213,29 @@ class Customer extends Authenticatable implements CustomerContract, JWTSubject
     }
 
     /**
-     * get all cart inactive cart instance of a customer
+     * Is wishlist shared by the customer.
+     */
+    public function isWishlistShared(): bool
+    {
+        return (bool) $this->wishlist_items()->where('shared', 1)->first();
+    }
+
+    /**
+     * Get wishlist shared link.
+     *
+     * @return string|null
+     */
+    public function getWishlistSharedLink()
+    {
+        return $this->isWishlistShared()
+            ? URL::signedRoute('shop.customer.wishlist.shared', ['id' => $this->id])
+            : null;
+    }
+
+    /**
+     * Get all cart inactive cart instance of a customer.
+     *
+     * @return HasMany
      */
     public function all_carts()
     {
@@ -111,62 +243,84 @@ class Customer extends Authenticatable implements CustomerContract, JWTSubject
     }
 
     /**
-     * get inactive cart inactive cart instance of a customer
+     * Get inactive cart instance of a customer.
+     *
+     * @return HasMany
      */
     public function inactive_carts()
     {
-        return $this->hasMany(CartProxy::modelClass(), 'customer_id')->where('is_active', 0);
+        return $this->hasMany(CartProxy::modelClass(), 'customer_id')
+            ->where('is_active', 0);
     }
 
     /**
-     * get active cart inactive cart instance of a customer
+     * Get active cart instance of a customer.
+     *
+     * @return HasMany
      */
     public function active_carts()
     {
-        return $this->hasMany(CartProxy::modelClass(), 'customer_id')->where('is_active', 1);
+        return $this->hasMany(CartProxy::modelClass(), 'customer_id')
+            ->where('is_active', 1);
     }
 
     /**
-     * get all reviews of a customer
-    */
-    public function all_reviews()
-    {
-        return $this->hasMany(ProductReviewProxy::modelClass(), 'customer_id');
-    }
-
-    /**
-     * get all orders of a customer
+     * Get all orders of a customer.
+     *
+     * @return HasMany
      */
-    public function all_orders()
+    public function orders()
     {
         return $this->hasMany(OrderProxy::modelClass(), 'customer_id');
     }
 
     /**
-     * Get the identifier that will be stored in the subject claim of the JWT.
+     * Get all reviews of a customer.
      *
-     * @return mixed
+     * @return HasMany
      */
-    public function getJWTIdentifier()
+    public function reviews()
     {
-        return $this->getKey();
+        return $this->hasMany(ProductReviewProxy::modelClass(), 'customer_id');
     }
 
     /**
-     * Return a key value array, containing any custom claims to be added to the JWT.
+     * Get all notes of a customer.
      *
-     * @return array
+     * @return HasMany
      */
-    public function getJWTCustomClaims()
+    public function notes()
     {
-        return [];
+        return $this->hasMany(CustomerNoteProxy::modelClass(), 'customer_id');
     }
 
     /**
      * Get the customer's subscription.
+     *
+     * @return HasOne
      */
     public function subscription()
     {
         return $this->hasOne(SubscribersListProxy::modelClass(), 'customer_id');
+    }
+
+    /**
+     * Get the channel that owns the customer.
+     *
+     * @return BelongsTo
+     */
+    public function channel()
+    {
+        return $this->belongsTo(ChannelProxy::modelClass(), 'channel_id');
+    }
+
+    /**
+     * Create a new factory instance for the model.
+     *
+     * @return CustomerFactory
+     */
+    protected static function newFactory()
+    {
+        return CustomerFactory::new();
     }
 }

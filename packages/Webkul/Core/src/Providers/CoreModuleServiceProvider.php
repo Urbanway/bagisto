@@ -4,9 +4,15 @@ namespace Webkul\Core\Providers;
 
 use Konekt\Concord\BaseModuleServiceProvider;
 
+/**
+ * This is the overridden `CoreModuleServiceProvider` class from the `konekt/concord` package.
+ */
 class CoreModuleServiceProvider extends BaseModuleServiceProvider
 {
-    public function boot()
+    /**
+     * Bootstrap services.
+     */
+    public function boot(): void
     {
         if ($this->areMigrationsEnabled()) {
             $this->registerMigrations();

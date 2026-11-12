@@ -2,38 +2,40 @@
 
 namespace Webkul\Core\Repositories;
 
+use Illuminate\Support\Facades\Event;
+use Webkul\Core\Contracts\Currency;
 use Webkul\Core\Eloquent\Repository;
-use Prettus\Repository\Traits\CacheableRepository;
 
 class CurrencyRepository extends Repository
 {
-    use CacheableRepository;
-
     /**
-     * Specify Model class name
-     *
-     * @return mixed
+     * Specify model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\Core\Contracts\Currency';
+        return Currency::class;
     }
 
     /**
-     * Specify Model class name
+     * Delete.
      *
      * @param  int  $id
      * @return bool
      */
-    public function delete($id) {
+    public function delete($id)
+    {
+        Event::dispatch('core.currency.delete.before', $id);
+
         if ($this->model->count() == 1) {
             return false;
-        } else {
-            if ($this->model->destroy($id)) {
-                return true;
-            } else {
-                return false;
-            }
         }
+
+        if (parent::delete($id)) {
+            Event::dispatch('core.currency.delete.after', $id);
+
+            return true;
+        }
+
+        return false;
     }
 }

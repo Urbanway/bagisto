@@ -1,16 +1,24 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Sales\Database\Factories;
 
-use Faker\Generator as Faker;
-use Webkul\Sales\Models\Order;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Sales\Models\Refund;
 
-$factory->define(Refund::class, function (Faker $faker, array $attributes) {
-    return [
-        'order_id' => function () {
-            return factory(Order::class)->create()->id;
-        },
-    ];
-});
+class RefundFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = Refund::class;
 
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [];
+    }
+}

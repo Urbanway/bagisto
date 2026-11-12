@@ -1,10 +1,10 @@
 <?php
 
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-class CreateCatalogRulesTable extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -20,8 +20,8 @@ class CreateCatalogRulesTable extends Migration
             $table->date('starts_from')->nullable();
             $table->date('ends_till')->nullable();
             $table->boolean('status')->default(0);
-            $table->boolean('condition_type')->default(1);
-            $table->json('conditions')->nullable();
+            $table->tinyInteger('condition_type')->default(1);
+            $table->jsonb('conditions')->nullable();
             $table->boolean('end_other_rules')->default(0);
             $table->string('action_type')->nullable();
             $table->decimal('discount_amount', 12, 4)->default(0);
@@ -39,4 +39,4 @@ class CreateCatalogRulesTable extends Migration
     {
         Schema::dropIfExists('catalog_rules');
     }
-}
+};

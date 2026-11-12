@@ -2,17 +2,16 @@
 
 namespace Webkul\CatalogRule\Repositories;
 
+use Webkul\CatalogRule\Contracts\CatalogRuleProduct;
 use Webkul\Core\Eloquent\Repository;
 
 class CatalogRuleProductRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return mixed
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\CatalogRule\Contracts\CatalogRuleProduct';
+        return CatalogRuleProduct::class;
     }
 }

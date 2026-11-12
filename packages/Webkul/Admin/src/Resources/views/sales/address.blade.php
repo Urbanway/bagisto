@@ -1,7 +1,39 @@
-{{ $address->company_name ?? '' }}<br>
-<b>{{ $address->name }}</b><br>
-{{ $address->address1 }}<br>
-{{ $address->postcode }} {{ $address->city }}<br>
-{{ $address->state }}<br>
-{{ core()->country_name($address->country) }}<br></br>
-{{ __('shop::app.checkout.onepage.contact') }} : {{ $address->phone }}
+<div class="flex flex-col">
+    <p
+        class="font-semibold leading-6 text-gray-800 dark:text-white"
+        v-pre
+    >
+        {{ $address->company_name }}
+    </p>
+
+    <p
+        class="font-semibold leading-6 text-gray-800 dark:text-white"
+        v-pre
+    >
+        {{ $address->name }}
+    </p>
+
+    @if ($address->vat_id)
+        <p
+            class="font-semibold leading-6 text-gray-800 dark:text-white"
+            v-pre
+        >
+            {{ $address->vat_id }}
+        </p>
+    @endif
+
+    <p
+        class="leading-6! text-gray-600 dark:text-gray-300"
+        v-pre
+    >
+        {{ $address->address }}<br>
+
+        {{ $address->city }}<br>
+
+        {{ $address->state }}<br>
+
+        {{ core()->countryName($address->country) }} @if ($address->postcode) ({{ $address->postcode }}) @endif<br>
+
+        {{ trans('admin::app.sales.orders.view.contact') }} : {{ $address->phone }}
+    </p>
+</div>

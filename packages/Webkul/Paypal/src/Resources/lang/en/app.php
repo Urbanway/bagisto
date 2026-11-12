@@ -1,9 +1,9 @@
 <?php
 
 return [
-    'error' => [
-        'universal-error' => 'Something went wrong!',
-        'sdk-validation-error' => 'Client ID not recognized for either production or sandbox!',
-        'authorization-error' => 'Client ID and Client Secret should be valid!'
-    ]
+    'errors' => [
+        'invalid-configs' => 'It seems there is a configuration issue with the PayPal payment method. Please contact the store owner for assistance.',
+        'payment-not-confirmed' => 'We could not confirm your PayPal payment, so no order was placed. Please try again.',
+        'something-went-wrong' => 'Something went wrong with the PayPal payment method. Please contact the store owner for assistance.',
+    ],
 ];

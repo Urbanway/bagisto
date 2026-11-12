@@ -5,21 +5,12 @@ namespace Webkul\Sales\Repositories;
 use Webkul\Core\Eloquent\Repository;
 use Webkul\Sales\Contracts\OrderAddress;
 
-/**
- * Order Address Repository
- *
- * @author    Jitendra Singh <jitendra@webkul.com>
- * @copyright 2018 Webkul Software Pvt Ltd (http://www.webkul.com)
- */
 class OrderAddressRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return string
+     * Specify the model class name.
      */
-
-    function model()
+    public function model(): string
     {
         return OrderAddress::class;
     }

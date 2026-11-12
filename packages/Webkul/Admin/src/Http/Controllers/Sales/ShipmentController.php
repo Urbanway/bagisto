@@ -2,133 +2,109 @@
 
 namespace Webkul\Admin\Http\Controllers\Sales;
 
+use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Webkul\Admin\DataGrids\Sales\OrderShipmentDataGrid;
 use Webkul\Admin\Http\Controllers\Controller;
-use Webkul\Sales\Repositories\OrderRepository;
+use Webkul\Product\Contracts\Product;
 use Webkul\Sales\Repositories\OrderItemRepository;
+use Webkul\Sales\Repositories\OrderRepository;
 use Webkul\Sales\Repositories\ShipmentRepository;
 
 class ShipmentController extends Controller
 {
     /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    protected $_config;
-
-    /**
-     * OrderRepository object
-     *
-     * @var \Webkul\Sales\Repositories\OrderRepository
-     */
-    protected $orderRepository;
-
-    /**
-     * OrderItemRepository object
-     *
-     * @var \Webkul\Sales\Repositories\OrderItemRepository
-     */
-    protected $orderItemRepository;
-
-    /**
-     * ShipmentRepository object
-     *
-     * @var \Webkul\Sales\Repositories\ShipmentRepository
-     */
-    protected $shipmentRepository;
-
-    /**
      * Create a new controller instance.
      *
-     * @param  \Webkul\Sales\Repositories\ShipmentRepository   $shipmentRepository
-     * @param  \Webkul\Sales\Repositories\OrderRepository  $orderRepository
-     * @param  \Webkul\Sales\Repositories\OrderitemRepository  $orderItemRepository
      * @return void
      */
     public function __construct(
-        ShipmentRepository $shipmentRepository,
-        OrderRepository $orderRepository,
-        OrderItemRepository $orderItemRepository
-    )
-    {
-        $this->middleware('admin');
-
-        $this->_config = request('_config');
-
-        $this->orderRepository = $orderRepository;
-
-        $this->orderItemRepository = $orderItemRepository;
-
-        $this->shipmentRepository = $shipmentRepository;
-    }
+        protected OrderRepository $orderRepository,
+        protected OrderItemRepository $orderItemRepository,
+        protected ShipmentRepository $shipmentRepository
+    ) {}
 
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\View\View
+     * @return View
      */
     public function index()
     {
-        return view($this->_config['view']);
+        if (request()->ajax()) {
+            return datagrid(OrderShipmentDataGrid::class)->process();
+        }
+
+        return view('admin::sales.shipments.index');
     }
 
     /**
      * Show the form for creating a new resource.
      *
-     * @param  int  $orderId
-     * @return \Illuminate\View\View
+     * @return View
      */
-    public function create($orderId)
+    public function create(int $orderId)
     {
         $order = $this->orderRepository->findOrFail($orderId);
 
-        if (! $order->channel || !$order->canShip()) {
-            session()->flash('error', trans('admin::app.sales.shipments.creation-error'));
+        if (
+            ! $order->channel
+            || ! $order->canShip()
+        ) {
+            session()->flash('error', trans('admin::app.sales.shipments.create.creation-error'));
 
             return redirect()->back();
         }
 
-        return view($this->_config['view'], compact('order'));
+        return view('admin::sales.shipments.create', compact('order'));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  int  $orderId
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
-    public function store($orderId)
+    public function store(int $orderId)
     {
         $order = $this->orderRepository->findOrFail($orderId);
 
         if (! $order->canShip()) {
-            session()->flash('error', trans('admin::app.sales.shipments.order-error'));
+            session()->flash('error', trans('admin::app.sales.shipments.create.order-error'));
 
             return redirect()->back();
         }
 
         $this->validate(request(), [
-            'shipment.source'        => 'required',
-            'shipment.items.*.*'     => 'required|numeric|min:0',
+            'shipment.source' => ['required', Rule::in($order->channel?->inventory_sources->pluck('id')->all() ?? [])],
+            'shipment.items.*.*' => 'required|numeric|min:0',
         ]);
 
-        $data = request()->all();
+        $data = request()->only(['shipment', 'carrier_name']);
 
-        if (! $this->isInventoryValidate($data)) {
-            session()->flash('error', trans('admin::app.sales.shipments.quantity-invalid'));
+        if (! $order->ownsItems(array_keys((array) ($data['shipment']['items'] ?? [])))) {
+            session()->flash('error', trans('admin::app.sales.shipments.create.quantity-invalid'));
 
             return redirect()->back();
         }
 
-        $this->shipmentRepository->create(array_merge($data, ['order_id' => $orderId]));
+        if (! $this->isInventoryValidate($data)) {
+            session()->flash('error', trans('admin::app.sales.shipments.create.quantity-invalid'));
 
-        session()->flash('success', trans('admin::app.response.create-success', ['name' => 'Shipment']));
+            return redirect()->back();
+        }
 
-        return redirect()->route($this->_config['redirect'], $orderId);
+        $this->shipmentRepository->create(array_merge($data, [
+            'order_id' => $orderId,
+        ]));
+
+        session()->flash('success', trans('admin::app.sales.shipments.create.success'));
+
+        return redirect()->route('admin.sales.orders.view', $orderId);
     }
 
     /**
-     * Checks if requested quantity available or not
+     * Checks if requested quantity available or not.
      *
      * @param  array  $data
      * @return bool
@@ -136,7 +112,7 @@ class ShipmentController extends Controller
     public function isInventoryValidate(&$data)
     {
         if (! isset($data['shipment']['items'])) {
-            return ;
+            return;
         }
 
         $valid = false;
@@ -144,7 +120,9 @@ class ShipmentController extends Controller
         $inventorySourceId = $data['shipment']['source'];
 
         foreach ($data['shipment']['items'] as $itemId => $inventorySource) {
-            if ($qty = $inventorySource[$inventorySourceId]) {
+            $qty = $inventorySource[$inventorySourceId];
+
+            if ((int) $qty) {
                 $orderItem = $this->orderItemRepository->find($itemId);
 
                 if ($orderItem->qty_to_ship < $qty) {
@@ -159,22 +137,15 @@ class ShipmentController extends Controller
 
                         $finalQty = ($child->qty_ordered / $orderItem->qty_ordered) * $qty;
 
-                        $availableQty = $child->product->inventories()
-                            ->where('inventory_source_id', $inventorySourceId)
-                            ->sum('qty');
-
-                        if ($child->qty_to_ship < $finalQty || $availableQty < $finalQty) {
+                        if (
+                            $child->qty_to_ship < $finalQty
+                            || ! $this->hasStockToShip($child->product, $inventorySourceId, $finalQty)
+                        ) {
                             return false;
                         }
                     }
-                } else {
-                    $availableQty = $orderItem->product->inventories()
-                            ->where('inventory_source_id', $inventorySourceId)
-                            ->sum('qty');
-
-                    if ($orderItem->qty_to_ship < $qty || $availableQty < $qty) {
-                        return false;
-                    }
+                } elseif (! $this->hasStockToShip($orderItem->product, $inventorySourceId, $qty)) {
+                    return false;
                 }
 
                 $valid = true;
@@ -189,13 +160,24 @@ class ShipmentController extends Controller
     /**
      * Show the view for the specified resource.
      *
-     * @param  int  $id
-     * @return \Illuminate\View\View
+     * @return View
      */
-    public function view($id)
+    public function view(int $id)
     {
         $shipment = $this->shipmentRepository->findOrFail($id);
 
-        return view($this->_config['view'], compact('shipment'));
+        return view('admin::sales.shipments.view', compact('shipment'));
+    }
+
+    /**
+     * Return true if the source holds the quantity, or the product does not manage its stock.
+     */
+    protected function hasStockToShip(Product $product, int $inventorySourceId, float $qty): bool
+    {
+        if (! $product->manage_stock) {
+            return true;
+        }
+
+        return $product->inventory_source_qty($inventorySourceId) >= $qty;
     }
 }

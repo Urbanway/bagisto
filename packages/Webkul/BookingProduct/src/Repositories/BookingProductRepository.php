@@ -2,8 +2,9 @@
 
 namespace Webkul\BookingProduct\Repositories;
 
-use Illuminate\Container\Container as App;
 use Carbon\Carbon;
+use Illuminate\Container\Container;
+use Webkul\BookingProduct\Contracts\BookingProduct;
 use Webkul\Core\Eloquent\Repository;
 
 class BookingProductRepository extends Repository
@@ -16,51 +17,44 @@ class BookingProductRepository extends Repository
     /**
      * Create a new repository instance.
      *
-     * @param  \Webkul\BookingProduct\Repositories\BookingProductDefaultSlotRepository  $bookingProductDefaultSlotRepository
-     * @param  \Webkul\BookingProduct\Repositories\BookingProductAppointmentSlotRepository  $bookingProductAppointmentSlotRepository
-     * @param  \Webkul\BookingProduct\Repositories\BookingProductEventTicketRepository  $bookingProductEventTicketRepository
-     * @param  \Webkul\BookingProduct\Repositories\BookingProductRentalSlotRepository  $bookingProductRentalSlotRepository
-     * @param  \Webkul\BookingProduct\Repositories\BookingProductTableSlotRepository  $bookingProductTableSlotRepository
      * @return void
      */
     public function __construct(
-        BookingProductDefaultSlotRepository $bookingProductDefaultSlotRepository,
-        BookingProductAppointmentSlotRepository $bookingProductAppointmentSlotRepository,
-        BookingProductEventTicketRepository $bookingProductEventTicketRepository,
-        BookingProductRentalSlotRepository $bookingProductRentalSlotRepository,
-        BookingProductTableSlotRepository $bookingProductTableSlotRepository,
-        App $app
-    )
-    {
-        parent::__construct($app);
+        protected BookingProductDefaultSlotRepository $bookingProductDefaultSlotRepository,
+        protected BookingProductAppointmentSlotRepository $bookingProductAppointmentSlotRepository,
+        protected BookingProductEventTicketRepository $bookingProductEventTicketRepository,
+        protected BookingProductRentalSlotRepository $bookingProductRentalSlotRepository,
+        protected BookingProductTableSlotRepository $bookingProductTableSlotRepository,
+        Container $container
+    ) {
+        parent::__construct($container);
 
-        $this->typeRepositories['default'] = $bookingProductDefaultSlotRepository;
-
-        $this->typeRepositories['appointment'] = $bookingProductAppointmentSlotRepository;
-
-        $this->typeRepositories['event'] = $bookingProductEventTicketRepository;
-
-        $this->typeRepositories['rental'] = $bookingProductRentalSlotRepository;
-
-        $this->typeRepositories['table'] = $bookingProductTableSlotRepository;
+        $this->typeRepositories = [
+            'default' => $bookingProductDefaultSlotRepository,
+            'appointment' => $bookingProductAppointmentSlotRepository,
+            'event' => $bookingProductEventTicketRepository,
+            'rental' => $bookingProductRentalSlotRepository,
+            'table' => $bookingProductTableSlotRepository,
+        ];
     }
 
     /**
      * Specify Model class name
-     *
-     * @return mixed
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\BookingProduct\Contracts\BookingProduct';
+        return BookingProduct::class;
     }
 
     /**
-     * @param  array  $data
-     * @return \Webkul\BookingProduct\Contracts\BookingProduct
+     * @return BookingProduct
      */
     public function create(array $data)
     {
+        if (isset($data['slots']) && empty($data['allow_slot_overlap'])) {
+            $data['slots'] = $this->validateSlots($data);
+        }
+
         $bookingProduct = parent::create($data);
 
         if ($bookingProduct->type == 'event') {
@@ -73,13 +67,20 @@ class BookingProductRepository extends Repository
     }
 
     /**
-     * @param  array  $data
+     * Update method.
+     *
      * @param  int  $id
      * @param  string  $attribute
-     * @return \Webkul\BookingProduct\Contracts\BookingProduct
+     * @return BookingProduct|void
      */
-    public function update(array $data, $id, $attribute = "id")
+    public function update(array $data, $id, $attribute = 'id')
     {
+        $allowOverlap = ! empty($data['allow_slot_overlap']);
+
+        if (isset($data['slots']) && ! $allowOverlap) {
+            $data['slots'] = $this->skipOverLappingSlots($data['slots']);
+        }
+
         $bookingProduct = parent::update($data, $id, $attribute);
 
         foreach ($this->typeRepositories as $type => $repository) {
@@ -98,7 +99,11 @@ class BookingProductRepository extends Repository
             if (isset($data['slots'])) {
                 $data['slots'] = $this->formatSlots($data);
 
-                $data['slots'] = $this->validateSlots($data);
+                if (! $allowOverlap) {
+                    $data['slots'] = $this->validateSlots($data);
+                }
+            } else {
+                $data['slots'] = $this->addSlots($data);
             }
 
             if (! $bookingProductTypeSlot) {
@@ -110,12 +115,14 @@ class BookingProductRepository extends Repository
     }
 
     /**
-     * @param  array  $data
-     * @return array
+     * Format Slots data.
      */
-    public function formatSlots($data)
+    public function formatSlots(array $data): array
     {
-        if (isset($data['same_slot_all_days']) && ! $data['same_slot_all_days']) {
+        if (
+            isset($data['same_slot_all_days'])
+            && ! $data['same_slot_all_days']
+        ) {
             for ($i = 0; $i < 7; $i++) {
                 if (! isset($data['slots'][$i])) {
                     $data['slots'][$i] = [];
@@ -125,8 +132,8 @@ class BookingProductRepository extends Repository
                     $slots = [];
 
                     foreach ($data['slots'][$i] as $slot) {
-                        $slots[] = array_merge($slot, ['id' => $i . '_slot_' . $count]);
-                        
+                        $slots[] = array_merge($slot, ['id' => $i.'_slot_'.$count]);
+
                         $count++;
                     }
 
@@ -141,10 +148,26 @@ class BookingProductRepository extends Repository
     }
 
     /**
-     * @param  array  $data
-     * @return array
+     * Add blank array where slots key in available.
      */
-    public function validateSlots($data)
+    public function addSlots(array $data): array
+    {
+        if (isset($data['same_slot_all_days']) && ! $data['same_slot_all_days']) {
+            return [[], [], [], [], [], [], []];
+        } else {
+            return (
+                $data['type'] == 'default'
+                && $data['booking_type'] == 'many'
+            )
+                ? [[], [], [], [], [], [], []]
+                : [];
+        }
+    }
+
+    /**
+     * Validate Slots data.
+     */
+    public function validateSlots(array $data): array
     {
         if (! isset($data['same_slot_all_days'])) {
             return $data['slots'];
@@ -162,44 +185,73 @@ class BookingProductRepository extends Repository
     }
 
     /**
-     * @param  array  $data
-     * @return array
+     * Filters out overlapping time slots from a given array.
+     * Supports both flat arrays and nested arrays of time slots.
      */
-    public function skipOverLappingSlots($slots)
+    public function skipOverLappingSlots(array $slots): array
+    {
+        $filteredSlots = [];
+
+        foreach ($slots as $key => $slot) {
+            if (isset($slot[0]) && is_array($slot[0])) {
+                $filteredSlots[$key] = $this->processSlots($slot);
+            } else {
+                $filteredSlots = array_merge($filteredSlots, $this->processSlots([$slot]));
+            }
+        }
+
+        return $filteredSlots;
+    }
+
+    /**
+     * Processes a list of time slots to remove overlapping intervals.
+     */
+    private function processSlots(array $slots): array
     {
         $tempSlots = [];
+
+        $validSlots = [];
 
         foreach ($slots as $key => $timeInterval) {
             $from = Carbon::createFromTimeString($timeInterval['from'])->getTimestamp();
 
             $to = Carbon::createFromTimeString($timeInterval['to'])->getTimestamp();
 
-            if ($from > $to) {
-                unset($slots[$key]);
-                
+            $isCrossDaySlot = isset($timeInterval['from_day'], $timeInterval['to_day'])
+                && $timeInterval['from_day'] != $timeInterval['to_day'];
+
+            if ($from > $to && ! $isCrossDaySlot) {
                 continue;
             }
 
             $isOverLapping = false;
 
             foreach ($tempSlots as $slot) {
-                if (($slot['from'] <= $from && $slot['to'] >= $from)
-                    || ($slot['from'] <= $to && $slot['to'] >= $to)
+                if (
+                    (
+                        $slot['from'] <= $from
+                        && $slot['to'] >= $from
+                    )
+                    || (
+                        $slot['from'] <= $to
+                        && $slot['to'] >= $to
+                    )
                 ) {
                     $isOverLapping = true;
-
-                    unset($slots[$key]);
+                    break;
                 }
             }
 
             if (! $isOverLapping) {
                 $tempSlots[] = [
                     'from' => $from,
-                    'to'   => $to,
+                    'to' => $to,
                 ];
+
+                $validSlots[] = $timeInterval;
             }
         }
 
-        return $slots;
+        return $validSlots;
     }
 }

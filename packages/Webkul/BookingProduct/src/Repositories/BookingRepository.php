@@ -2,28 +2,27 @@
 
 namespace Webkul\BookingProduct\Repositories;
 
-use Illuminate\Container\Container as App;
-use Illuminate\Support\Facades\Event;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Webkul\BookingProduct\Contracts\Booking;
 use Webkul\Core\Eloquent\Repository;
 
 class BookingRepository extends Repository
 {
     /**
      * Specify Model class name
-     *
-     * @return mixed
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\BookingProduct\Contracts\Booking';
+        return Booking::class;
     }
 
     /**
-     * @param  array  $data
-     * @return \Webkul\BookingProduct\Contracts\Booking
+     * Create Booking Product.
      */
-    public function create(array $data)
+    public function create(array $data): void
     {
         $order = $data['order'];
 
@@ -36,35 +35,85 @@ class BookingRepository extends Repository
 
             $from = $to = null;
 
-            if (isset($item->additional['booking']['slot'])) {
-                if (isset($item->additional['booking']['slot']['from']) && isset($item->additional['booking']['slot']['to'])) {
-                    $from = $item->additional['booking']['slot']['from'];
+            $bookingItem = $item->additional['booking'];
 
-                    $to = $item->additional['booking']['slot']['to'];
+            if (isset($bookingItem['slot'])) {
+                if (isset($bookingItem['slot']['from'], $bookingItem['slot']['to'])) {
+                    $from = $bookingItem['slot']['from'];
+
+                    $to = $bookingItem['slot']['to'];
                 } else {
-                    $timestamps = explode('-', $item->additional['booking']['slot']);
+                    $timestamps = explode('-', $bookingItem['slot']);
 
-                    $from = current($timestamps);
+                    $from = $timestamps[0];
 
-                    $to = end($timestamps);
+                    $to = $timestamps[1];
                 }
-            } elseif (isset($item->additional['booking']['date_from']) && isset($item->additional['booking']['date_to'])) {
-                $from = Carbon::createFromTimeString($item->additional['booking']['date_from'] . ' 00:00:00')->getTimestamp();
+            } elseif (isset($bookingItem['date_from'], $bookingItem['date_to'])) {
+                $from = Carbon::createFromTimeString($bookingItem['date_from'].' 00:00:00')->getTimestamp();
 
-                $to = Carbon::createFromTimeString($item->additional['booking']['date_to'] . ' 23:59:59')->getTimestamp();
+                $to = Carbon::createFromTimeString($bookingItem['date_to'].' 23:59:59')->getTimestamp();
             }
 
+            $bookingProduct = $item->product?->booking_products()->first();
+
+            $allowCancellation = $bookingProduct
+                ? (bool) ($bookingProduct->allow_cancellation ?? true)
+                : true;
+
             $booking = parent::create([
-                'qty'                             => $item->qty_ordered,
-                'from'                            => $from,
-                'to'                              => $to,
-                'order_id'                        => $order->id,
-                'order_item_id'                   => $item->id,
-                'product_id'                      => $item->product_id,
-                'booking_product_event_ticket_id' => $item->additional['booking']['ticket_id'] ?? null,
+                'qty' => $item->qty_ordered,
+                'from' => $from,
+                'to' => $to,
+                'allow_cancellation' => $allowCancellation,
+                'order_id' => $order->id,
+                'order_item_id' => $item->id,
+                'product_id' => $item->product_id,
+                'booking_product_event_ticket_id' => $bookingItem['ticket_id'] ?? null,
             ]);
 
-            Event::dispatch('marketplace.booking.save.after', $booking);
+            Event::dispatch('booking_product.booking.save.after', $booking);
         }
+    }
+
+    /**
+     * Get all bookings for the given date and time range.
+     */
+    public function getBookings(array $dateRange): Collection
+    {
+        $tablePrefix = DB::getTablePrefix();
+
+        return $this->select(
+            'bookings.id',
+            'bookings.order_id',
+            'bookings.from as start',
+            'bookings.to as end',
+            'orders.status as status',
+            'orders.customer_email as email',
+            'orders.created_at as created_at',
+            'products.sku as product_sku',
+            'product_flat.name as product_name',
+            'order_items.additional as item_additional',
+            'addresses.address as address',
+            'addresses.phone as contact',
+            'addresses.city as city',
+            'addresses.state as state',
+            'addresses.country as country',
+            'addresses.postcode as postcode',
+        )
+            ->addSelect(DB::raw(db_grammar()->concat($tablePrefix.'orders.customer_first_name', "' '", $tablePrefix.'orders.customer_last_name').' as full_name'))
+            ->leftJoin('orders', 'bookings.order_id', '=', 'orders.id')
+            ->leftJoin('order_items', 'bookings.order_item_id', '=', 'order_items.id')
+            ->leftJoin('products', 'bookings.product_id', '=', 'products.id')
+            ->leftJoin('product_flat', function ($join) {
+                $join->on('product_flat.product_id', '=', 'products.id')
+                    ->where('product_flat.locale', core()->getCurrentLocale()->code)
+                    ->where('product_flat.channel', core()->getCurrentChannelCode());
+            })
+            ->leftJoin('addresses', 'bookings.order_id', '=', 'addresses.order_id')
+            ->where('bookings.from', '<=', $dateRange[1])
+            ->where('bookings.to', '>=', $dateRange[0])
+            ->distinct()
+            ->get();
     }
 }

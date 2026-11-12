@@ -2,64 +2,62 @@
 
 namespace Webkul\Attribute\Repositories;
 
-use Illuminate\Container\Container as App;
-use Illuminate\Support\Facades\Event;
-use Webkul\Attribute\Repositories\AttributeOptionRepository;
+use Illuminate\Container\Container;
+use Illuminate\Database\Eloquent\Collection;
+use Webkul\Attribute\Contracts\Attribute;
+use Webkul\Attribute\Contracts\AttributeFamily;
+use Webkul\Attribute\Enums\AttributeTypeEnum;
 use Webkul\Core\Eloquent\Repository;
 
 class AttributeRepository extends Repository
 {
     /**
-     * Attribute option repository instance.
+     * Attributes.
      *
-     * @var \Webkul\Attribute\Repositories\AttributeOptionRepository
+     * @var array
      */
-    protected $attributeOptionRepository;
+    protected $attributes = [];
 
     /**
      * Create a new repository instance.
      *
-     * @param  \Webkul\Attribute\Repositories\AttributeOptionRepository  $attributeOptionRepository
      * @return void
      */
     public function __construct(
-        AttributeOptionRepository $attributeOptionRepository,
-        App $app
+        protected AttributeOptionRepository $attributeOptionRepository,
+        Container $container
     ) {
-        $this->attributeOptionRepository = $attributeOptionRepository;
-
-        parent::__construct($app);
+        parent::__construct($container);
     }
 
     /**
      * Specify model class name.
-     *
-     * @return mixed
      */
-    public function model()
+    public function model(): string
     {
-        return 'Webkul\Attribute\Contracts\Attribute';
+        return Attribute::class;
     }
 
     /**
      * Create attribute.
      *
-     * @param  array  $data
-     * @return \Webkul\Attribute\Contracts\Attribute
+     * @return Attribute
      */
     public function create(array $data)
     {
-        Event::dispatch('catalog.attribute.create.before');
+        $data = $this->applyAttributeTypeRules($data);
 
-        $data = $this->validateUserInput($data);
-
-        $options = isset($data['options']) ? $data['options'] : [];
+        $options = $data['options'] ?? [];
 
         unset($data['options']);
 
         $attribute = $this->model->create($data);
 
-        if (in_array($attribute->type, ['select', 'multiselect', 'checkbox']) && count($options)) {
+        if (in_array($attribute->type, [
+            AttributeTypeEnum::CHECKBOX->value,
+            AttributeTypeEnum::SELECT->value,
+            AttributeTypeEnum::MULTISELECT->value,
+        ])) {
             foreach ($options as $optionInputs) {
                 $this->attributeOptionRepository->create(array_merge([
                     'attribute_id' => $attribute->id,
@@ -67,88 +65,89 @@ class AttributeRepository extends Repository
             }
         }
 
-        Event::dispatch('catalog.attribute.create.after', $attribute);
-
         return $attribute;
     }
 
     /**
      * Update attribute.
      *
-     * @param  array  $data
-     * @param  int $id
-     * @param  string  $attribute
-     * @return \Webkul\Attribute\Contracts\Attribute
+     * @param  int  $id
+     * @return Attribute
      */
-    public function update(array $data, $id, $attribute = "id")
+    public function update(array $data, $id)
     {
-        $data = $this->validateUserInput($data);
+        $data = $this->applyAttributeTypeRules($data);
 
         $attribute = $this->find($id);
 
-        Event::dispatch('catalog.attribute.update.before', $id);
-
         $attribute->update($data);
 
-        if (in_array($attribute->type, ['select', 'multiselect', 'checkbox'])) {
-            if (isset($data['options'])) {
-                foreach ($data['options'] as $optionId => $optionInputs) {
-                    $isNew = $optionInputs['isNew'] == 'true' ? true : false;
+        if (! in_array($attribute->type, [
+            AttributeTypeEnum::CHECKBOX->value,
+            AttributeTypeEnum::SELECT->value,
+            AttributeTypeEnum::MULTISELECT->value,
+        ])) {
+            return $attribute;
+        }
 
-                    if ($isNew) {
-                        $this->attributeOptionRepository->create(array_merge([
-                            'attribute_id' => $attribute->id,
-                        ], $optionInputs));
-                    } else {
-                        $isDelete = $optionInputs['isDelete'] == 'true' ? true : false;
+        if (! isset($data['options'])) {
+            return $attribute;
+        }
 
-                        if ($isDelete) {
-                            $this->attributeOptionRepository->delete($optionId);
-                        } else {
-                            $this->attributeOptionRepository->update($optionInputs, $optionId);
-                        }
-                    }
+        foreach ($data['options'] as $optionId => $optionInputs) {
+            $isNew = $optionInputs['isNew'] == 'true';
+
+            if ($isNew) {
+                $this->attributeOptionRepository->create(array_merge([
+                    'attribute_id' => $attribute->id,
+                ], $optionInputs));
+            } else {
+                $isDelete = $optionInputs['isDelete'] == 'true';
+
+                if ($isDelete) {
+                    $this->attributeOptionRepository->delete($optionId);
+                } else {
+                    $this->attributeOptionRepository->update($optionInputs, $optionId);
                 }
             }
         }
-
-        Event::dispatch('catalog.attribute.update.after', $attribute);
 
         return $attribute;
     }
 
     /**
-     * Delete attribute.
+     * Apply attribute type rules to the given data.
      *
-     * @param  int  $id
-     * @return void
-     */
-    public function delete($id)
-    {
-        Event::dispatch('catalog.attribute.delete.before', $id);
-
-        parent::delete($id);
-
-        Event::dispatch('catalog.attribute.delete.after', $id);
-    }
-
-    /**
-     * Validate user input.
+     * Configurable attributes cannot vary per channel or locale. Attribute
+     * types that don't support filtering are forced to non-filterable.
+     * Option-based types don't use per-locale values.
      *
      * @param  array  $data
      * @return array
      */
-    public function validateUserInput($data)
+    public function applyAttributeTypeRules($data)
     {
-        if ($data['is_configurable']) {
-            $data['value_per_channel'] = $data['value_per_locale'] = 0;
+        if (! empty($data['is_configurable'])) {
+            $data['value_per_channel'] = false;
+            $data['value_per_locale'] = false;
         }
 
-        if (! in_array($data['type'], ['select', 'multiselect', 'price', 'checkbox'])) {
-            $data['is_filterable'] = 0;
+        if (! in_array($data['type'], [
+            AttributeTypeEnum::PRICE->value,
+            AttributeTypeEnum::CHECKBOX->value,
+            AttributeTypeEnum::SELECT->value,
+            AttributeTypeEnum::MULTISELECT->value,
+            AttributeTypeEnum::BOOLEAN->value,
+        ])) {
+            $data['is_filterable'] = false;
         }
 
-        if (in_array($data['type'], ['select', 'multiselect', 'boolean'])) {
+        if (in_array($data['type'], [
+            AttributeTypeEnum::CHECKBOX->value,
+            AttributeTypeEnum::SELECT->value,
+            AttributeTypeEnum::MULTISELECT->value,
+            AttributeTypeEnum::BOOLEAN->value,
+        ])) {
             unset($data['value_per_locale']);
         }
 
@@ -160,22 +159,33 @@ class AttributeRepository extends Repository
      *
      * @return array
      */
-    public function getFilterAttributes()
+    public function getFilterableAttributes()
     {
-        return $this->model->where('is_filterable', 1)->with('options')->get();
+        return $this->model->where('is_filterable', 1)->get();
     }
 
     /**
      * Get product default attributes.
      *
      * @param  array  $codes
-     * @return array
+     * @return Collection
      */
     public function getProductDefaultAttributes($codes = null)
     {
-        $attributeColumns  = ['id', 'code', 'value_per_channel', 'value_per_locale', 'type', 'is_filterable'];
+        $attributeColumns = [
+            'id',
+            'code',
+            'value_per_channel',
+            'value_per_locale',
+            'type',
+            'is_filterable',
+            'is_configurable',
+        ];
 
-        if (! is_array($codes) && ! $codes)
+        if (
+            ! is_array($codes)
+            && ! $codes
+        ) {
             return $this->findWhereIn('code', [
                 'name',
                 'description',
@@ -187,6 +197,7 @@ class AttributeRepository extends Repository
                 'special_price_to',
                 'status',
             ], $attributeColumns);
+        }
 
         if (in_array('*', $codes)) {
             return $this->all($attributeColumns);
@@ -196,37 +207,18 @@ class AttributeRepository extends Repository
     }
 
     /**
-     * Get attribute by code.
-     *
-     * @param  string  $code
-     * @return \Webkul\Attribute\Contracts\Attribute
-     */
-    public function getAttributeByCode($code)
-    {
-        static $attributes = [];
-
-        if (array_key_exists($code, $attributes)) {
-            return $attributes[$code];
-        }
-
-        return $attributes[$code] = $this->findOneByField('code', $code);
-    }
-
-    /**
      * Get family attributes.
      *
-     * @param  \Webkul\Attribute\Contracts\AttributeFamily  $attributeFamily
-     * @return \Webkul\Attribute\Contracts\Attribute
+     * @param  AttributeFamily  $attributeFamily
+     * @return Attribute
      */
     public function getFamilyAttributes($attributeFamily)
     {
-        static $attributes = [];
-
-        if (array_key_exists($attributeFamily->id, $attributes)) {
-            return $attributes[$attributeFamily->id];
+        if (array_key_exists($attributeFamily->id, $this->attributes)) {
+            return $this->attributes[$attributeFamily->id];
         }
 
-        return $attributes[$attributeFamily->id] = $attributeFamily->custom_attributes;
+        return $this->attributes[$attributeFamily->id] = $attributeFamily->custom_attributes;
     }
 
     /**
@@ -240,32 +232,24 @@ class AttributeRepository extends Repository
 
         $trimmed = [];
 
-        foreach ($attributes as $key => $attribute) {
+        foreach ($attributes as $attribute) {
             if (
                 $attribute->code != 'tax_category_id'
-                && ($attribute->type == 'select'
-                    || $attribute->type == 'multiselect'
-                    || $attribute->code == 'sku')
+                && (
+                    in_array($attribute->type, [
+                        AttributeTypeEnum::SELECT->value,
+                        AttributeTypeEnum::MULTISELECT->value,
+                    ])
+                    || $attribute->code == 'sku'
+                )
             ) {
-                if ($attribute->options()->exists()) {
-                    array_push($trimmed, [
-                        'id'          => $attribute->id,
-                        'name'        => $attribute->admin_name,
-                        'type'        => $attribute->type,
-                        'code'        => $attribute->code,
-                        'has_options' => true,
-                        'options'     => $attribute->options,
-                    ]);
-                } else {
-                    array_push($trimmed, [
-                        'id'          => $attribute->id,
-                        'name'        => $attribute->admin_name,
-                        'type'        => $attribute->type,
-                        'code'        => $attribute->code,
-                        'has_options' => false,
-                        'options'     => null,
-                    ]);
-                }
+                array_push($trimmed, [
+                    'id' => $attribute->id,
+                    'name' => $attribute->admin_name,
+                    'type' => $attribute->type,
+                    'code' => $attribute->code,
+                    'options' => $attribute->options,
+                ]);
             }
         }
 

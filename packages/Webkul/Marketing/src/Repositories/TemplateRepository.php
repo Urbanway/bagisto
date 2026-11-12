@@ -3,16 +3,15 @@
 namespace Webkul\Marketing\Repositories;
 
 use Webkul\Core\Eloquent\Repository;
+use Webkul\Marketing\Contracts\Template;
 
 class TemplateRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return mixed
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\Marketing\Contracts\Template';
+        return Template::class;
     }
 }

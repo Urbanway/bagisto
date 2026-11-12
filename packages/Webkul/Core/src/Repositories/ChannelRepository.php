@@ -2,27 +2,42 @@
 
 namespace Webkul\Core\Repositories;
 
-use Webkul\Core\Eloquent\Repository;
+use Illuminate\Container\Container;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
-use Prettus\Repository\Traits\CacheableRepository;
+use Prettus\Repository\Events\RepositoryEntityCreated;
+use Prettus\Repository\Events\RepositoryEntityUpdated;
+use Webkul\Core\Contracts\Channel;
+use Webkul\Core\Eloquent\Repository;
+use Webkul\Core\Helpers\MediaFileName;
 
 class ChannelRepository extends Repository
 {
-    use CacheableRepository;
-
     /**
-     * Specify Model class name
+     * Create a new repository instance.
      *
-     * @return mixed
+     * @return void
      */
-    function model()
-    {
-        return 'Webkul\Core\Contracts\Channel';
+    public function __construct(
+        protected MediaFileName $mediaFileName,
+        Container $container
+    ) {
+        parent::__construct($container);
     }
 
     /**
-     * @param  array  $data
-     * @return \Webkul\Core\Contracts\Channel
+     * Specify the model class name.
+     */
+    public function model(): string
+    {
+        return Channel::class;
+    }
+
+    /**
+     * Create a channel, invalidating the cached reads only once its relations
+     * and images are written, so a concurrent read cannot cache a partial one.
+     *
+     * @return Channel
      */
     public function create(array $data)
     {
@@ -48,20 +63,21 @@ class ChannelRepository extends Repository
 
         $this->uploadImages($data, $channel, 'favicon');
 
+        Event::dispatch(new RepositoryEntityCreated($this, $channel));
+
         return $channel;
     }
 
     /**
-     * @param  array  $data
+     * Update a channel, invalidating the cached reads only once its relations
+     * and images are written, so a concurrent read cannot cache a partial one.
+     *
      * @param  int  $id
-     * @param  string  $attribute
-     * @return \Webkul\Core\Contracts\Channel
+     * @return Channel
      */
-    public function update(array $data, $id, $attribute = "id")
+    public function update(array $data, $id)
     {
-        $channel = $this->find($id);
-
-        $channel = parent::update($data, $id, $attribute);
+        $channel = parent::update($data, $id);
 
         $channel->locales()->sync($data['locales']);
 
@@ -73,38 +89,100 @@ class ChannelRepository extends Repository
 
         $this->uploadImages($data, $channel, 'favicon');
 
+        Event::dispatch(new RepositoryEntityUpdated($this, $channel));
+
         return $channel;
     }
 
     /**
+     * Upload images.
+     *
      * @param  array  $data
-     * @param  \Webkul\Core\Contratcs\Channel  $channel
+     * @param  Channel  $channel
      * @param  string  $type
      * @return void
      */
-    public function uploadImages($data, $channel, $type = "logo")
+    public function uploadImages($data, $channel, $type = 'logo')
     {
-        if (isset($data[$type])) {
-            foreach ($data[$type] as $imageId => $image) {
-                $file = $type . '.' . $imageId;
-                $dir = 'channel/' . $channel->id;
+        $meta = collect($data[$type.'_meta'] ?? [])->first() ?? [];
 
-                if (request()->hasFile($file)) {
-                    if ($channel->{$type}) {
-                        Storage::delete($channel->{$type});
-                    }
-
-                    $channel->{$type} = request()->file($file)->store($dir);
-                    $channel->save();
-                }
+        if (request()->hasFile($type)) {
+            if ($channel->{$type}) {
+                Storage::delete($channel->{$type});
             }
-        } else {
+
+            $file = current(request()->file($type));
+
+            $channel->{$type} = $this->mediaFileName->resolve(
+                'channels/'.$channel->id,
+                $meta['file_name'] ?? null,
+                $this->mediaFileName->extension($file)
+            );
+
+            Storage::put($channel->{$type}, $file->get());
+
+            $channel->save();
+        } elseif (! isset($data[$type])) {
             if ($channel->{$type}) {
                 Storage::delete($channel->{$type});
             }
 
             $channel->{$type} = null;
+
             $channel->save();
+
+            $this->clearMediaAltText($channel, $type.'_alt');
+
+            return;
+        } elseif ($channel->{$type}) {
+            $renamed = $this->mediaFileName->rename($channel->{$type}, $meta['file_name'] ?? null);
+
+            if ($renamed !== $channel->{$type}) {
+                $channel->{$type} = $renamed;
+
+                $channel->save();
+            }
+        }
+
+        if (
+            array_key_exists('alt_text', $meta)
+            && in_array($type.'_alt', $channel->translatedAttributes)
+        ) {
+            foreach (core()->getRequestedLocaleCodes() as $localeCode) {
+                if (! $translation = $channel->translate($localeCode)) {
+                    continue;
+                }
+
+                $translation->{$type.'_alt'} = $meta['alt_text'];
+            }
+
+            $channel->save();
+        }
+    }
+
+    /**
+     * Drop the alt text of a channel image across every locale, used when the image
+     * itself is removed.
+     *
+     * @param  Channel  $channel
+     */
+    protected function clearMediaAltText($channel, string $attribute): void
+    {
+        if (! in_array($attribute, $channel->translatedAttributes)) {
+            return;
+        }
+
+        foreach ($channel->translations as $translation) {
+            $translation->{$attribute} = null;
+
+            /**
+             * A translation that has not been persisted yet is written by the
+             * parent save, which sets the foreign key. Saving it here would
+             * insert a row with a null owner.
+             */
+            if ($translation->exists) {
+                $translation->save();
+            }
         }
     }
 }

@@ -2,10 +2,9 @@
 
 namespace Webkul\Paypal\Providers;
 
-use Illuminate\Support\Facades\View;
-use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
-use Webkul\Theme\ViewRenderEventManager;
+use Illuminate\Support\ServiceProvider;
+use Webkul\Core\View\ViewRenderEventManager;
 
 class EventServiceProvider extends ServiceProvider
 {
@@ -16,10 +15,8 @@ class EventServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        Event::listen('bagisto.shop.layout.body.after', static function(ViewRenderEventManager $viewRenderEventManager) {
+        Event::listen('bagisto.shop.layout.body.after', static function (ViewRenderEventManager $viewRenderEventManager) {
             $viewRenderEventManager->addTemplate('paypal::checkout.onepage.paypal-smart-button');
         });
-
-        Event::listen('sales.invoice.save.after', 'Webkul\Paypal\Listeners\Transaction@saveTransaction');
     }
 }

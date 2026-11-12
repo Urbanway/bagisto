@@ -2,17 +2,16 @@
 
 namespace Webkul\CartRule\Repositories;
 
+use Webkul\CartRule\Contracts\CartRuleCustomer;
 use Webkul\Core\Eloquent\Repository;
 
 class CartRuleCustomerRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return mixed
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\CartRule\Contracts\CartRuleCustomer';
+        return CartRuleCustomer::class;
     }
 }

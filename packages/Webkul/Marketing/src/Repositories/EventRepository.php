@@ -3,16 +3,15 @@
 namespace Webkul\Marketing\Repositories;
 
 use Webkul\Core\Eloquent\Repository;
+use Webkul\Marketing\Contracts\Event;
 
 class EventRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return mixed
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\Marketing\Contracts\Event';
+        return Event::class;
     }
 }

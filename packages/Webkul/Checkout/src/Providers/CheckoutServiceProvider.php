@@ -2,65 +2,29 @@
 
 namespace Webkul\Checkout\Providers;
 
+use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Foundation\AliasLoader;
-use Webkul\Checkout\Facades\Cart;
-use Illuminate\Database\Eloquent\Factory as EloquentFactory;
+use Webkul\Checkout\Http\Middleware\ResolveBuyNowCart;
 
 class CheckoutServiceProvider extends ServiceProvider
 {
-    public function boot()
-    {
-        include __DIR__ . '/../Http/helpers.php';
-
-        $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
-
-        $this->app->register(ModuleServiceProvider::class);
-
-        $this->app->register(EventServiceProvider::class);
-
-        $this->registerEloquentFactoriesFrom(__DIR__ . '/../Database/Factories');
-    }
-
     /**
      * Register services.
-     *
-     * @return void
      */
-    public function register()
+    public function register(): void
     {
-        $this->registerFacades();
+        include __DIR__.'/../Http/helpers.php';
     }
 
     /**
-     * Register Bouncer as a singleton.
-     *
-     * @return void
+     * Bootstrap services.
      */
-    protected function registerFacades()
+    public function boot(Router $router): void
     {
-        //to make the cart facade and bind the
-        //alias to the class needed to be called.
-        $loader = AliasLoader::getInstance();
+        $router->aliasMiddleware('cart.buy_now', ResolveBuyNowCart::class);
 
-        $loader->alias('cart', Cart::class);
+        $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
 
-        $this->app->singleton('cart', function () {
-            return new cart();
-        });
-
-        $this->app->bind('cart', 'Webkul\Checkout\Cart');
-    }
-
-    /**
-     * Register factories.
-     *
-     * @param string $path
-     *
-     * @return void
-     */
-    protected function registerEloquentFactoriesFrom($path): void
-    {
-        $this->app->make(EloquentFactory::class)->load($path);
+        $this->app->register(EventServiceProvider::class);
     }
 }

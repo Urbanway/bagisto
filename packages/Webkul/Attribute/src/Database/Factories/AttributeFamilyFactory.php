@@ -1,15 +1,29 @@
 <?php
 
-/** @var \Illuminate\Database\Eloquent\Factory $factory */
+namespace Webkul\Attribute\Database\Factories;
 
-use Faker\Generator as Faker;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Webkul\Attribute\Models\AttributeFamily;
 
-$factory->define(AttributeFamily::class, function (Faker $faker) {
-    return [
-        'name'            => $faker->word(),
-        'code'            => $faker->word(),
-        'is_user_defined' => rand(0, 1),
-        'status'          => 0,
-    ];
-});
+class AttributeFamilyFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = AttributeFamily::class;
+
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'name' => $this->faker->word(),
+            'code' => $this->faker->unique()->lexify('family_??????????'),
+            'is_user_defined' => random_int(0, 1),
+            'status' => 0,
+        ];
+    }
+}

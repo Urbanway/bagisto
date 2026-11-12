@@ -2,50 +2,126 @@
 
 namespace Webkul\Customer\Repositories;
 
+use Illuminate\Container\Container;
+use Illuminate\Support\Facades\Storage;
 use Webkul\Core\Eloquent\Repository;
+use Webkul\Customer\Contracts\Customer as CustomerContract;
+use Webkul\Customer\Contracts\CustomerGroup;
+use Webkul\Customer\Models\Customer;
+use Webkul\Sales\Models\OrderProxy;
 
 class CustomerRepository extends Repository
 {
     /**
-     * Specify Model class name
+     * Create a new repository instance.
      *
-     * @return mixed
+     * @return void
      */
+    public function __construct(
+        protected CustomerGroupRepository $customerGroupRepository,
+        Container $container
+    ) {
+        parent::__construct($container);
+    }
 
-    function model()
+    /**
+     * Specify the model class name.
+     */
+    public function model(): string
     {
-        return 'Webkul\Customer\Contracts\Customer';
+        return CustomerContract::class;
     }
 
     /**
      * Check if customer has order pending or processing.
      *
-     * @param Webkul\Customer\Models\Customer
-     * @return boolean
+     * @param  Customer
+     * @return bool
      */
-    public function checkIfCustomerHasOrderPendingOrProcessing($customer)
+    public function haveActiveOrders($customer)
     {
-        return $customer->all_orders->pluck('status')->contains(function ($val) {
+        return $customer->orders->pluck('status')->contains(function ($val) {
             return $val === 'pending' || $val === 'processing';
         });
     }
 
     /**
-     * Check if bulk customers, if they have order pending or processing.
+     * Returns current customer group.
      *
-     * @param array
-     * @return boolean
+     * @return CustomerGroup
      */
-    public function checkBulkCustomerIfTheyHaveOrderPendingOrProcessing($customerIds)
+    public function getCurrentGroup()
     {
-        foreach ($customerIds as $customerId) {
-            $customer = $this->findorFail($customerId);
+        $customer = auth()->guard()->user();
 
-            if ($this->checkIfCustomerHasOrderPendingOrProcessing($customer)) {
-                return true;
+        return $customer->group ?? $this->customerGroupRepository->getGuestGroup();
+    }
+
+    /**
+     * Upload customer's images.
+     *
+     * @param  array  $data
+     * @param  Customer  $customer
+     * @param  string  $type
+     * @return void
+     */
+    public function uploadImages($data, $customer, $type = 'image')
+    {
+        if (isset($data[$type])) {
+            $request = request();
+
+            foreach ($data[$type] as $imageId => $image) {
+                $file = $type.'.'.$imageId;
+                $dir = 'customer/'.$customer->id;
+
+                if ($request->hasFile($file)) {
+                    if ($customer->{$type}) {
+                        Storage::delete($customer->{$type});
+                    }
+
+                    $customer->{$type} = $request->file($file)->store($dir);
+                    $customer->save();
+                }
             }
-        }
+        } else {
+            if ($customer->{$type}) {
+                Storage::delete($customer->{$type});
+            }
 
-        return false;
+            $customer->{$type} = null;
+            $customer->save();
+        }
+    }
+
+    /**
+     * Sync new registered customer data.
+     *
+     * @param  CustomerContract  $customer
+     * @return mixed
+     */
+    public function syncNewRegisteredCustomerInformation($customer)
+    {
+        OrderProxy::query()->where('customer_email', $customer->email)->update([
+            'is_guest' => 0,
+            'customer_id' => $customer->id,
+            'customer_type' => Customer::class,
+        ]);
+
+        $orders = OrderProxy::query()->where('customer_id', $customer->id)->get();
+
+        $orders->each(function ($order) use ($customer) {
+            $order->addresses()->update([
+                'customer_id' => $customer->id,
+            ]);
+
+            $order->shipments()->update([
+                'customer_id' => $customer->id,
+                'customer_type' => Customer::class,
+            ]);
+
+            $order->downloadable_link_purchased()->update([
+                'customer_id' => $customer->id,
+            ]);
+        });
     }
 }

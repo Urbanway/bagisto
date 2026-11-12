@@ -2,11 +2,12 @@
 
 namespace Webkul\SocialLogin\Http\Controllers;
 
+use Illuminate\Foundation\Bus\DispatchesJobs;
+use Illuminate\Foundation\Validation\ValidatesRequests;
+use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Event;
 use Laravel\Socialite\Facades\Socialite;
-use Illuminate\Foundation\Bus\DispatchesJobs;
-use Illuminate\Foundation\Validation\ValidatesRequests;
 use Webkul\SocialLogin\Repositories\CustomerSocialAccountRepository;
 
 class LoginController extends Controller
@@ -14,70 +15,93 @@ class LoginController extends Controller
     use DispatchesJobs, ValidatesRequests;
 
     /**
-     * Contains route related configuration
-     *
-     * @var array
+     * The providers a customer may sign in with, each keyed to the setting that enables it.
      */
-    protected $_config;
-
-    /**
-     * CustomerSocialAccountRepository
-     *
-     * @var \Webkul\SocialLogin\Repositories\CustomerSocialAccountRepository
-     */
-    protected $customerSocialAccountRepository;
+    public const PROVIDERS = [
+        'facebook' => 'enable_facebook',
+        'twitter' => 'enable_twitter',
+        'google' => 'enable_google',
+        'linkedin-openid' => 'enable_linkedin',
+        'github' => 'enable_github',
+    ];
 
     /**
      * Create a new controller instance.
      *
-     * @param  \Webkul\SocialLogin\Repositories\CustomerSocialAccountRepository  $customerSocialAccountRepository
      * @return void
      */
-    public function __construct(CustomerSocialAccountRepository $customerSocialAccountRepository)
-    {
-        $this->customerSocialAccountRepository = $customerSocialAccountRepository;
-
-        $this->_config = request('_config');
-    }
+    public function __construct(protected CustomerSocialAccountRepository $customerSocialAccountRepository) {}
 
     /**
-     * Redirects to the social provider
+     * Redirects to the social provider.
      *
      * @param  string  $provider
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function redirectToProvider($provider)
     {
+        $this->abortUnlessEnabled($provider);
+
         try {
-            return Socialite::driver($provider)->redirect();
+            return Socialite::driver($provider)->redirect('shop.customers.account.profile.index');
         } catch (\Exception $e) {
             session()->flash('error', $e->getMessage());
 
-            return redirect()->route('customer.session.index');
+            return redirect()->route('shop.customer.session.index');
         }
     }
 
     /**
-     * Handles callback
+     * Sign in the customer the provider identifies, unless their email belongs to another account or they are inactive.
      *
      * @param  string  $provider
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function handleProviderCallback($provider)
     {
+        $this->abortUnlessEnabled($provider);
+
         try {
             $user = Socialite::driver($provider)->user();
         } catch (\Exception $e) {
-            return redirect()->route('customer.session.index');
+            return redirect()->route('shop.customer.session.index');
         }
 
         $customer = $this->customerSocialAccountRepository->findOrCreateCustomer($user, $provider);
 
-        auth()->guard('customer')->login($customer, true);
+        if (! $customer) {
+            session()->flash('error', trans('shop::app.customers.login-form.social-account-exists'));
 
-        // Event passed to prepare cart after login
-        Event::dispatch('customer.after.login', $customer->email);
+            return redirect()->route('shop.customer.session.index');
+        }
 
-        return redirect()->intended(route($this->_config['redirect']));
+        if (! $customer->status) {
+            session()->flash('warning', trans('shop::app.customers.login-form.not-activated'));
+
+            return redirect()->route('shop.customer.session.index');
+        }
+
+        auth()->guard('customer')->login($customer);
+
+        Event::dispatch('customer.after.login', $customer);
+
+        if ($intended = session()->pull('shop.url.intended')) {
+            return redirect()->to($intended);
+        }
+
+        return redirect()->route('shop.customers.account.profile.index');
+    }
+
+    /**
+     * Abort unless the provider is one a customer may sign in with and the store has enabled it.
+     */
+    protected function abortUnlessEnabled(string $provider): void
+    {
+        if (
+            ! isset(self::PROVIDERS[$provider])
+            || ! core()->getConfigData('customer.settings.social_login.'.self::PROVIDERS[$provider])
+        ) {
+            abort(404);
+        }
     }
 }

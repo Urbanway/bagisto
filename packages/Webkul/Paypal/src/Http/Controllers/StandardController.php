@@ -2,61 +2,61 @@
 
 namespace Webkul\Paypal\Http\Controllers;
 
-use Webkul\Paypal\Helpers\Ipn;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Response;
+use Illuminate\View\View;
 use Webkul\Checkout\Facades\Cart;
+use Webkul\Paypal\Enums\IpnStatus;
+use Webkul\Paypal\Helpers\Ipn;
+use Webkul\Sales\Contracts\Order;
 use Webkul\Sales\Repositories\OrderRepository;
+use Webkul\Sales\Transformers\OrderResource;
 
 class StandardController extends Controller
 {
     /**
-     * OrderRepository $orderRepository
-     *
-     * @var \Webkul\Sales\Repositories\OrderRepository
+     * Session key holding the cart a PayPal Standard payment was started for.
      */
-    protected $orderRepository;
-
-    /**
-     * IPN $ipnHelper
-     *
-     * @var \Webkul\Paypal\Helpers\Ipn
-     */
-    protected $ipnHelper;
+    public const INTENT_KEY = 'paypal_standard_intent';
 
     /**
      * Create a new controller instance.
      *
-     * @param  \Webkul\Attribute\Repositories\OrderRepository  $orderRepository
-     * @param  \Webkul\Paypal\Helpers\Ipn  $ipnHelper
      * @return void
      */
     public function __construct(
-        OrderRepository $orderRepository,
-        Ipn $ipnHelper
-    )
-    {
-        $this->orderRepository = $orderRepository;
-
-        $this->ipnHelper = $ipnHelper;
-    }
+        protected OrderRepository $orderRepository,
+        protected Ipn $ipnHelper
+    ) {}
 
     /**
      * Redirects to the paypal.
-     *
-     * @return \Illuminate\View\View
      */
-    public function redirect()
+    public function redirect(): RedirectResponse|View
     {
+        $cart = Cart::getCart();
+
+        if (
+            $cart
+            && Cart::requiresSignInToCheckout()
+        ) {
+            return redirect()->route('shop.checkout.onepage.index', request()->only('buy_now'));
+        }
+
+        session()->put(self::INTENT_KEY, $cart?->id);
+
         return view('paypal::standard-redirect');
     }
 
     /**
      * Cancel payment from paypal.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function cancel()
     {
-        session()->flash('error', 'Paypal payment has been canceled.');
+        session()->flash('error', trans('shop::app.checkout.cart.paypal-payment-cancelled'));
 
         return redirect()->route('shop.checkout.cart.index');
     }
@@ -64,26 +64,73 @@ class StandardController extends Controller
     /**
      * Success payment.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function success()
     {
-        $order = $this->orderRepository->create(Cart::prepareDataForOrder());
+        $cartId = session(self::INTENT_KEY);
+
+        if (! $cartId) {
+            return $this->paymentNotStarted();
+        }
+
+        if ($order = $this->orderRepository->findOneWhere(['cart_id' => $cartId])) {
+            return $this->orderPlaced($order);
+        }
+
+        $cart = Cart::getCart();
+
+        if ($cart?->id !== $cartId) {
+            return $this->paymentNotStarted();
+        }
+
+        $order = $this->orderRepository->create((new OrderResource($cart))->jsonSerialize());
 
         Cart::deActivateCart();
 
-        session()->flash('order', $order);
-
-        return redirect()->route('shop.checkout.success');
+        return $this->orderPlaced($order);
     }
 
     /**
-     * Paypal IPN listener.
-     *
-     * @return \Illuminate\Http\Response
+     * Paypal IPN listener, answering with an error only when PayPal should send it again.
      */
-    public function ipn()
+    public function ipn(): JsonResponse
     {
-        $this->ipnHelper->processIpn(request()->all());
+        try {
+            $status = $this->ipnHelper->processIpn(request()->all());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return new JsonResponse(['status' => IpnStatus::ERROR->value], 500);
+        }
+
+        return new JsonResponse(['status' => $status->value]);
+    }
+
+    /**
+     * Send the customer to the order they came back to, whether it was just placed or already was.
+     *
+     * @param  Order  $order
+     * @return Response
+     */
+    protected function orderPlaced($order)
+    {
+        session()->flash('order_id', $order->id);
+
+        return redirect()->route('shop.checkout.onepage.success');
+    }
+
+    /**
+     * Turn away a return this session never started a payment for, so the endpoint cannot place an order on its own.
+     *
+     * @return Response
+     */
+    protected function paymentNotStarted()
+    {
+        session()->forget(self::INTENT_KEY);
+
+        session()->flash('error', trans('paypal::app.errors.payment-not-confirmed'));
+
+        return redirect()->route('shop.checkout.cart.index');
     }
 }

@@ -2,42 +2,42 @@
 
 namespace Webkul\Product\Repositories;
 
-use Illuminate\Support\Facades\Storage;
-use Webkul\Core\Eloquent\Repository;
 use Illuminate\Support\Str;
+use Webkul\Core\Eloquent\Repository;
+use Webkul\Product\Contracts\ProductDownloadableSample;
 
 class ProductDownloadableSampleRepository extends Repository
 {
     /**
-     * Specify Model class name
-     *
-     * @return string
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\Product\Contracts\ProductDownloadableSample';
+        return ProductDownloadableSample::class;
     }
 
     /**
+     * Store an uploaded sample file and return the path it was saved at.
+     *
      * @param  array  $data
      * @param  int  $productId
      * @return mixed
      */
     public function upload($data, $productId)
     {
-        if (request()->hasFile('file')) {
-            return [
-                'file'      => $path = request()->file('file')->store('product_downloadable_links/' . $productId),
-                'file_name' => request()->file('file')->getClientOriginalName(),
-                'file_url'  => Storage::url($path),
-            ];
+        if (! request()->hasFile('file')) {
+            return [];
         }
 
-        return [];
+        return [
+            'file' => $path = request()->file('file')->store('products/'.$productId.'/downloadable-samples', 'private'),
+            'file_name' => request()->file('file')->getClientOriginalName(),
+        ];
     }
 
     /**
-     * @param  array  $data
+     * Save the downloadable samples of a product, removing the ones left out.
+     *
      * @param  Webkul\Product\Contracts\Product  $product
      * @return void
      */

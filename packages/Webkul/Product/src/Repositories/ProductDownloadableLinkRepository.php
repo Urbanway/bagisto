@@ -2,39 +2,39 @@
 
 namespace Webkul\Product\Repositories;
 
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Webkul\Core\Eloquent\Repository;
+use Webkul\Product\Contracts\ProductDownloadableLink;
+use Webkul\Product\Models\Product;
 
 class ProductDownloadableLinkRepository extends Repository
 {
     /**
-     * Specify model class name.
-     *
-     * @return string
+     * Specify the model class name.
      */
-    public function model()
+    public function model(): string
     {
-        return 'Webkul\Product\Contracts\ProductDownloadableLink';
+        return ProductDownloadableLink::class;
     }
 
     /**
      * Upload.
      *
      * @param  array  $data
-     * @param  integer $productId
+     * @param  int  $productId
      * @return array
      */
     public function upload($data, $productId)
     {
         foreach ($data as $type => $file) {
-            if (request()->hasFile($type)) {
-                return [
-                    $type           => $path = request()->file($type)->store('product_downloadable_links/' . $productId, 'private'),
-                    $type . '_name' => $file->getClientOriginalName(),
-                    $type . '_url'  => Storage::url($path),
-                ];
+            if (! request()->hasFile($type)) {
+                continue;
             }
+
+            return [
+                $type => request()->file($type)->store('products/'.$productId.'/downloadable-links', 'private'),
+                $type.'_name' => $file->getClientOriginalName(),
+            ];
         }
 
         return [];
@@ -43,8 +43,7 @@ class ProductDownloadableLinkRepository extends Repository
     /**
      * Save links.
      *
-     * @param  array  $data
-     * @param  \Webkul\Product\Models\Product  $product
+     * @param  Product  $product
      * @return void
      */
     public function saveLinks(array $data, $product)

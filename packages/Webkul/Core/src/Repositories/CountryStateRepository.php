@@ -2,20 +2,16 @@
 
 namespace Webkul\Core\Repositories;
 
+use Webkul\Core\Contracts\CountryState;
 use Webkul\Core\Eloquent\Repository;
-use Prettus\Repository\Traits\CacheableRepository;
 
 class CountryStateRepository extends Repository
 {
-    use CacheableRepository;
-
     /**
-     * Specify Model class name
-     *
-     * @return mixed
+     * Specify the model class name.
      */
-    function model()
+    public function model(): string
     {
-        return 'Webkul\Core\Contracts\CountryState';
+        return CountryState::class;
     }
 }

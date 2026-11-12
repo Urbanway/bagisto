@@ -1,10 +1,10 @@
 <?php
 
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-class CreateCartRulesTable extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -17,16 +17,16 @@ class CreateCartRulesTable extends Migration
             $table->increments('id');
             $table->string('name')->nullable();
             $table->string('description')->nullable();
-            $table->date('starts_from')->nullable();
-            $table->date('ends_till')->nullable();
+            $table->dateTime('starts_from')->nullable();
+            $table->dateTime('ends_till')->nullable();
             $table->boolean('status')->default(0);
             $table->integer('coupon_type')->default(1);
             $table->boolean('use_auto_generation')->default(0);
             $table->integer('usage_per_customer')->default(0);
             $table->integer('uses_per_coupon')->default(0);
             $table->integer('times_used')->unsigned()->default(0);
-            $table->boolean('condition_type')->default(1);
-            $table->json('conditions')->nullable();
+            $table->tinyInteger('condition_type')->default(1);
+            $table->jsonb('conditions')->nullable();
             $table->boolean('end_other_rules')->default(0);
             $table->boolean('uses_attribute_conditions')->default(0);
             $table->string('action_type')->nullable();
@@ -49,4 +49,4 @@ class CreateCartRulesTable extends Migration
     {
         Schema::dropIfExists('cart_rules');
     }
-}
+};

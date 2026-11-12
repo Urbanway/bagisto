@@ -3,20 +3,33 @@
 namespace Webkul\Checkout\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Webkul\Checkout\Contracts\CartAddress as CartAddressContract;
+use Webkul\Checkout\Database\Factories\CartAddressFactory;
 use Webkul\Core\Models\Address;
 
 /**
  * Class CartAddress
- * @package Webkul\Checkout\Models
  *
- * @property integer $cart_id
- * @property Cart    $cart
  *
+ * @property int $cart_id
+ * @property Cart $cart
  */
 class CartAddress extends Address implements CartAddressContract
 {
+    use HasFactory;
+
+    /**
+     * Define the address type shipping.
+     */
     public const ADDRESS_TYPE_SHIPPING = 'cart_shipping';
+
+    /**
+     * Define the address type billing.
+     */
     public const ADDRESS_TYPE_BILLING = 'cart_billing';
 
     /**
@@ -28,15 +41,13 @@ class CartAddress extends Address implements CartAddressContract
 
     /**
      * The "booted" method of the model.
-     *
-     * @return void
      */
-    protected static function boot()
+    protected static function boot(): void
     {
         static::addGlobalScope('address_type', static function (Builder $builder) {
             $builder->whereIn('address_type', [
                 self::ADDRESS_TYPE_BILLING,
-                self::ADDRESS_TYPE_SHIPPING
+                self::ADDRESS_TYPE_SHIPPING,
             ]);
         });
 
@@ -46,7 +57,7 @@ class CartAddress extends Address implements CartAddressContract
     /**
      * Get the shipping rates for the cart address.
      */
-    public function shipping_rates()
+    public function shipping_rates(): HasMany
     {
         return $this->hasMany(CartShippingRateProxy::modelClass());
     }
@@ -54,8 +65,16 @@ class CartAddress extends Address implements CartAddressContract
     /**
      * Get the cart record associated with the address.
      */
-    public function cart()
+    public function cart(): BelongsTo
     {
-        return $this->belongsTo(Cart::class);
+        return $this->belongsTo(CartProxy::modelClass());
+    }
+
+    /**
+     * Create a new factory instance for the model
+     */
+    protected static function newFactory(): Factory
+    {
+        return CartAddressFactory::new();
     }
 }
